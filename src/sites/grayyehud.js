@@ -25,6 +25,7 @@ export const meta = {
   id: 'grayyehud',
   name: 'Gray Club (Yehud)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 const ITEM_RE =

@@ -33,6 +33,7 @@ export const meta = {
   id: 'zappa',
   name: 'Zappa Club',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 /**

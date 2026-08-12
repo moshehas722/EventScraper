@@ -24,6 +24,7 @@ app.get('/api/sites', (_req, res) => {
       id: s.meta.id,
       name: s.meta.name,
       currency: s.meta.currency,
+      origin: s.meta.origin,
     })),
   );
 });

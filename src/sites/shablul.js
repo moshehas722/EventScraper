@@ -18,6 +18,7 @@ export const meta = {
   id: 'shablul',
   name: 'Shablul (Tel Aviv)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 /**

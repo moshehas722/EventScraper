@@ -17,6 +17,7 @@ export const meta = {
   id: 'hameretz2',
   name: 'Hameretz 2 (Tel Aviv)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 /**

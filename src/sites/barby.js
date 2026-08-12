@@ -18,6 +18,7 @@ export const meta = {
   id: 'barby',
   name: 'Barby (Tel Aviv)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 /**

@@ -21,6 +21,7 @@ export const meta = {
   id: 'papaito',
   name: 'Papaito',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 const NONCE_RE = /ajaxNonce":"([a-f0-9]+)"/;

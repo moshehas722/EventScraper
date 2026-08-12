@@ -17,6 +17,7 @@ export const meta = {
   id: 'haezor',
   name: 'HaZor (Tel Aviv)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 const HEBREW_MONTHS = {

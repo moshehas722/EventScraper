@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { faviconUrl, resolveSiteOrigin } from './siteOrigins.js';
 import './App.css';
 
 function todayIso() {
@@ -41,7 +42,7 @@ function formatMonthDay(iso) {
   });
 }
 
-/** @typedef {'today' | 'tomorrow' | 'plus2' | 'plus3' | 'week' | 'date'} DateFilterMode */
+/** @typedef {'today' | 'tomorrow' | 'plus2' | 'plus3' | 'week' | 'all' | 'date'} DateFilterMode */
 
 function getFilterDayIso(mode, selectedDate) {
   const today = todayIso();
@@ -54,6 +55,7 @@ function getFilterDayIso(mode, selectedDate) {
 }
 
 function matchesDateFilter(eventDate, mode, selectedDate) {
+  if (mode === 'all') return true;
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return eventDate === dayIso;
   if (mode === 'week') {
@@ -64,10 +66,11 @@ function matchesDateFilter(eventDate, mode, selectedDate) {
 }
 
 function dateFilterLabel(mode, selectedDate) {
+  if (mode === 'all') return 'all dates';
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return formatDisplayDate(dayIso);
   const today = todayIso();
-  return `the upcoming week (${formatDayName(today, 'short')}, ${formatMonthDay(today)} – ${formatDayName(addDays(today, 6), 'short')}, ${formatMonthDay(addDays(today, 6))})`;
+  return `this week (${formatDayName(today, 'short')}, ${formatMonthDay(today)} – ${formatDayName(addDays(today, 6), 'short')}, ${formatMonthDay(addDays(today, 6))})`;
 }
 
 function buildDateFilters() {
@@ -77,7 +80,8 @@ function buildDateFilters() {
     { id: 'tomorrow', label: 'Tomorrow' },
     { id: 'plus2', label: formatDayName(addDays(today, 2)) },
     { id: 'plus3', label: formatDayName(addDays(today, 3)) },
-    { id: 'week', label: 'Upcoming week' },
+    { id: 'week', label: 'This Week' },
+    { id: 'all', label: 'All' },
     { id: 'date', label: 'Date' },
   ];
 }
@@ -87,14 +91,26 @@ export default function App() {
   const [date, setDate] = useState(todayIso);
   const [events, setEvents] = useState([]);
   const [selectedSources, setSelectedSources] = useState(() => new Set());
+  const [multiSelect, setMultiSelect] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
+  const [siteMeta, setSiteMeta] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/sites')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setSiteMeta(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   const sources = [...new Set(events.map((e) => e.site))].sort((a, b) => a.localeCompare(b));
 
   const toggleSource = (name) => {
     setSelectedSources((prev) => {
+      if (!multiSelect) {
+        return prev.has(name) && prev.size === 1 ? new Set() : new Set([name]);
+      }
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
@@ -106,10 +122,14 @@ export default function App() {
     setSelectedSources(new Set(sources));
   };
 
+  const selectNoneSources = () => {
+    setSelectedSources(new Set());
+  };
+
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
   const filteredEvents = dateEvents.filter((e) => selectedSources.has(e.site));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
-  const showDateColumn = dateFilter === 'week';
+  const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
 
@@ -145,16 +165,77 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="header-inner">
-          <div>
-            <h1>EventScraper</h1>
-            <p className="subtitle">
-              Consolidated event listings across supported Tel Aviv venues
-            </p>
-          </div>
+          <h1>EventScraper</h1>
         </div>
       </header>
 
-      <main className="main">
+      <div className="app-body">
+        {lastFetched && sources.length > 0 && (
+          <aside className="sources-sidebar card">
+            <div className="source-filter-header">
+              <span className="field-label">Sources</span>
+            </div>
+            <div className="source-options">
+              <div className="source-bulk-actions">
+                <button type="button" className="link-btn" onClick={selectAllSources}>
+                  Select all
+                </button>
+                <span className="source-bulk-sep" aria-hidden>·</span>
+                <button type="button" className="link-btn" onClick={selectNoneSources}>
+                  Select none
+                </button>
+              </div>
+              <label className="source-multi-toggle">
+                <input
+                  type="checkbox"
+                  checked={multiSelect}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setMultiSelect(on);
+                    if (!on) {
+                      setSelectedSources((prev) => {
+                        if (prev.size <= 1) return prev;
+                        const first = sources.find((s) => prev.has(s));
+                        return first ? new Set([first]) : new Set();
+                      });
+                    }
+                  }}
+                />
+                Multiple selection
+              </label>
+            </div>
+            <ul className="source-list" role="group" aria-label="Filter by venue">
+              {sources.map((name) => {
+                const selected = selectedSources.has(name);
+                const siteIcon = faviconUrl(resolveSiteOrigin(name, siteMeta));
+                return (
+                  <li key={name}>
+                    <button
+                      type="button"
+                      className={`source-item${selected ? ' source-item--selected' : ''}`}
+                      aria-pressed={selected}
+                      onClick={() => toggleSource(name)}
+                    >
+                      {siteIcon && (
+                        <img
+                          src={siteIcon}
+                          alt=""
+                          className="site-icon"
+                          width={16}
+                          height={16}
+                          loading="lazy"
+                        />
+                      )}
+                      <span className="source-item-name">{name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
+        )}
+
+        <main className="main">
         <section className="controls card">
           <div className="controls-row">
             <div className="date-filter">
@@ -205,35 +286,6 @@ export default function App() {
               )}
             </button>
           </div>
-
-          {lastFetched && sources.length > 0 && (
-            <div className="source-filter">
-              <div className="source-filter-header">
-                <span className="field-label">Sources</span>
-                {sourceFilterActive && (
-                  <button type="button" className="link-btn" onClick={selectAllSources}>
-                    Select all
-                  </button>
-                )}
-              </div>
-              <div className="venue-pills" role="group" aria-label="Filter by venue">
-                {sources.map((name) => {
-                  const selected = selectedSources.has(name);
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      className={`venue-pill${selected ? ' venue-pill--selected' : ''}`}
-                      aria-pressed={selected}
-                      onClick={() => toggleSource(name)}
-                    >
-                      {name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {lastFetched && !loading && (
             <p className="meta">
@@ -295,7 +347,11 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEvents.map((e, i) => (
+                  {filteredEvents.map((e, i) => {
+                    const siteIcon = faviconUrl(
+                      e.siteOrigin ?? resolveSiteOrigin(e.site, siteMeta),
+                    );
+                    return (
                     <tr key={`${e.url}-${i}`}>
                       {showDateColumn && (
                         <td className="date-cell">
@@ -305,20 +361,34 @@ export default function App() {
                       )}
                       <td className="time-cell">{e.time}</td>
                       <td className="price-cell">{e.priceText}</td>
-                      <td className="site-cell">{e.site}</td>
+                      <td className="site-cell">
+                        {siteIcon && (
+                          <img
+                            src={siteIcon}
+                            alt=""
+                            className="site-icon"
+                            width={16}
+                            height={16}
+                            loading="lazy"
+                          />
+                        )}
+                        <span>{e.site}</span>
+                      </td>
                       <td className="name-cell">
                         <a href={e.url} target="_blank" rel="noopener noreferrer">
                           {e.name}
                         </a>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </section>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

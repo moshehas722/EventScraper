@@ -21,6 +21,7 @@ export const meta = {
   id: 'babebar',
   name: 'Babe Bar (Hod Hasharon)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 /**

@@ -21,6 +21,7 @@ export const meta = {
   id: 'ozen',
   name: 'Ozen (Tel Aviv)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 /**

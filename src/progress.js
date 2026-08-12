@@ -54,5 +54,6 @@ async function fetchSite(site) {
   progress.log('starting');
   const events = await site.fetchEvents(progress);
   progress.log(`done (${events.length} events)`);
-  return events;
+  const origin = site.meta.origin ?? null;
+  return origin ? events.map((e) => ({ ...e, siteOrigin: origin })) : events;
 }

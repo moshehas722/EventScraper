@@ -21,6 +21,7 @@ export const meta = {
   id: 'teder',
   name: 'Teder (Tel Aviv)',
   currency: '₪',
+  origin: ORIGIN,
 };
 
 /**
