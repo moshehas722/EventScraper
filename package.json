@@ -1,0 +1,23 @@
+{
+  "name": "event-scraper",
+  "version": "0.1.0",
+  "description": "Scrapes event/ticketing sites and lists shows (name + price) for a given day.",
+  "type": "module",
+  "bin": {
+    "event-scraper": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "server": "node src/server.js",
+    "dev:web": "npm run dev --prefix web",
+    "build:web": "npm run build --prefix web",
+    "dev": "node scripts/dev.mjs"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
