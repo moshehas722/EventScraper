@@ -9,8 +9,11 @@ export const SITE_ORIGINS = {
   Papaito: 'https://papaito.co.il',
   'Shablul (Tel Aviv)': 'https://shablul.smarticket.co.il',
   'Gray Club (Yehud)': 'https://grayclub.co.il',
+  'Gray Club (Modiin)': 'https://grayclub.co.il',
+  'Gray Club (Tel Aviv)': 'https://grayclub.co.il',
   'Teder (Tel Aviv)': 'https://www.teder.fm',
   'Zappa Club': 'https://www.zappa-club.co.il',
+  'Muzi (Center)': 'https://muzi.co.il',
 };
 
 export function resolveSiteOrigin(siteName, siteMeta = []) {

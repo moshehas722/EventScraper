@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { faviconUrl, resolveSiteOrigin } from './siteOrigins.js';
+import {
+  buildSourceGroups,
+  loadUiState,
+  mergeSourceSelection,
+  saveUiState,
+} from './sourceGroups.js';
 import './App.css';
 
 function todayIso() {
@@ -86,12 +92,37 @@ function buildDateFilters() {
   ];
 }
 
+function GroupCheckbox({ checked, indeterminate, onChange, label }) {
+  const ref = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="source-group-checkbox"
+      checked={checked}
+      aria-label={label}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
 export default function App() {
+  const initialUi = useMemo(() => loadUiState(), []);
+
   const [dateFilter, setDateFilter] = useState(/** @type {DateFilterMode} */ ('today'));
   const [date, setDate] = useState(todayIso);
   const [events, setEvents] = useState([]);
   const [selectedSources, setSelectedSources] = useState(() => new Set());
-  const [multiSelect, setMultiSelect] = useState(true);
+  const [multiSelect, setMultiSelect] = useState(() => initialUi?.multiSelect ?? true);
+  const [collapsedGroups, setCollapsedGroups] = useState(
+    () => initialUi?.collapsedGroups ?? new Set(),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
@@ -104,7 +135,15 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    saveUiState({ selectedSources, multiSelect, collapsedGroups });
+  }, [selectedSources, multiSelect, collapsedGroups]);
+
   const sources = [...new Set(events.map((e) => e.site))].sort((a, b) => a.localeCompare(b));
+  const sourceGroups = useMemo(
+    () => buildSourceGroups(sources, siteMeta),
+    [sources, siteMeta],
+  );
 
   const toggleSource = (name) => {
     setSelectedSources((prev) => {
@@ -114,6 +153,32 @@ export default function App() {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleGroup = (group) => {
+    setSelectedSources((prev) => {
+      const { sources: names } = group;
+      const allSelected = names.every((n) => prev.has(n));
+
+      if (!multiSelect) {
+        if (allSelected) return new Set();
+        return new Set([names[0]]);
+      }
+
+      const next = new Set(prev);
+      if (allSelected) names.forEach((n) => next.delete(n));
+      else names.forEach((n) => next.add(n));
+      return next;
+    });
+  };
+
+  const toggleGroupCollapsed = (key) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -144,8 +209,11 @@ export default function App() {
       }
       const data = await res.json();
       const fetchedSources = [...new Set(data.events.map((e) => e.site))];
+      const stored = loadUiState();
       setEvents(data.events);
-      setSelectedSources(new Set(fetchedSources));
+      setSelectedSources(
+        mergeSourceSelection(stored?.selectedSources, fetchedSources),
+      );
       setLastFetched(new Date());
     } catch (err) {
       setError(err.message);
@@ -160,6 +228,33 @@ export default function App() {
   const filterActive = sourceFilterActive;
   const displayCount = filteredEvents.length;
   const scopeCount = dateEvents.length;
+
+  const renderSourceItem = (name, nested = false) => {
+    const selected = selectedSources.has(name);
+    const siteIcon = faviconUrl(resolveSiteOrigin(name, siteMeta));
+    return (
+      <li key={name} className={nested ? 'source-group-item' : undefined}>
+        <button
+          type="button"
+          className={`source-item${selected ? ' source-item--selected' : ''}${nested ? ' source-item--nested' : ''}`}
+          aria-pressed={selected}
+          onClick={() => toggleSource(name)}
+        >
+          {!nested && siteIcon && (
+            <img
+              src={siteIcon}
+              alt=""
+              className="site-icon"
+              width={16}
+              height={16}
+              loading="lazy"
+            />
+          )}
+          <span className="source-item-name">{name}</span>
+        </button>
+      </li>
+    );
+  };
 
   return (
     <div className="app">
@@ -205,29 +300,59 @@ export default function App() {
               </label>
             </div>
             <ul className="source-list" role="group" aria-label="Filter by venue">
-              {sources.map((name) => {
-                const selected = selectedSources.has(name);
-                const siteIcon = faviconUrl(resolveSiteOrigin(name, siteMeta));
+              {sourceGroups.map((group) => {
+                if (group.sources.length === 1) {
+                  return renderSourceItem(group.sources[0]);
+                }
+
+                const selectedCount = group.sources.filter((n) => selectedSources.has(n)).length;
+                const allSelected = selectedCount === group.sources.length;
+                const someSelected = selectedCount > 0 && !allSelected;
+                const collapsed = collapsedGroups.has(group.key);
+                const groupIcon = faviconUrl(group.origin ?? resolveSiteOrigin(group.label, siteMeta));
+
                 return (
-                  <li key={name}>
-                    <button
-                      type="button"
-                      className={`source-item${selected ? ' source-item--selected' : ''}`}
-                      aria-pressed={selected}
-                      onClick={() => toggleSource(name)}
-                    >
-                      {siteIcon && (
-                        <img
-                          src={siteIcon}
-                          alt=""
-                          className="site-icon"
-                          width={16}
-                          height={16}
-                          loading="lazy"
-                        />
-                      )}
-                      <span className="source-item-name">{name}</span>
-                    </button>
+                  <li key={group.key} className="source-group">
+                    <div className="source-group-header">
+                      <GroupCheckbox
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        label={`${allSelected ? 'Deselect' : 'Select'} all in ${group.label}`}
+                        onChange={() => toggleGroup(group)}
+                      />
+                      <button
+                        type="button"
+                        className="source-group-toggle"
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleGroupCollapsed(group.key)}
+                      >
+                        <span
+                          className={`source-group-chevron${collapsed ? ' source-group-chevron--collapsed' : ''}`}
+                          aria-hidden
+                        >
+                          ▾
+                        </span>
+                        {groupIcon && (
+                          <img
+                            src={groupIcon}
+                            alt=""
+                            className="site-icon"
+                            width={16}
+                            height={16}
+                            loading="lazy"
+                          />
+                        )}
+                        <span className="source-group-label">{group.label}</span>
+                        <span className="source-group-count">
+                          {selectedCount}/{group.sources.length}
+                        </span>
+                      </button>
+                    </div>
+                    {!collapsed && (
+                      <ul className="source-group-items" role="group" aria-label={group.label}>
+                        {group.sources.map((name) => renderSourceItem(name, true))}
+                      </ul>
+                    )}
                   </li>
                 );
               })}

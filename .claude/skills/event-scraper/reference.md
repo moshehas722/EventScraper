@@ -152,7 +152,31 @@ Sold-out events (`tickets_available: false`) still include `pricelist`.
 | Price | On event page / tickets.grayclub.co.il → `N/A` in listing |
 | URL | `/event/{artistId}/{showId}/` |
 
-Paginate while `hideButton` is false. Only scrape Yehud (`categorytermid=5`); Tel Aviv and Modiin use other term IDs.
+Paginate while `hideButton` is false. Location term IDs: Yehud `5`, Modiin `6`, Tel Aviv `7` (from `data-categorytermid` on the load-more button).
+
+### WordPress + grayux theme (Gray Club Modiin)
+
+| | |
+|---|---|
+| URL | `https://grayclub.co.il/gray-מודיעין/` |
+| Endpoint | Same as Yehud: `POST /wp-admin/admin-ajax.php` — `action=load_more_shows` |
+| Params | `posts_per_page`, `load_more_shows=6`, **`categorytermid=6`** (Modiin) |
+| Response / fields | Same HTML fragment shape as Yehud (`singer-name`, `DD.MM.YYYY`, door time, `/event/{id}/{showId}/`) |
+| Price | Not in listing → `N/A` |
+
+Same pagination and parsing as `grayyehud.js`; only the location path and `categorytermid` differ.
+
+### WordPress + grayux theme (Gray Club Tel Aviv)
+
+| | |
+|---|---|
+| URL | `https://grayclub.co.il/gray-תל-אביב/` |
+| Endpoint | Same as Yehud: `POST /wp-admin/admin-ajax.php` — `action=load_more_shows` |
+| Params | `posts_per_page`, `load_more_shows=6`, **`categorytermid=7`** (Tel Aviv) |
+| Response / fields | Same HTML fragment shape as Yehud (`singer-name`, `DD.MM.YYYY`, door time, `/event/{id}/{showId}/`) |
+| Price | Not in listing → `N/A` |
+
+Same pagination and parsing as `grayyehud.js`; only the location path and `categorytermid` differ.
 
 ### Custom PHP SPA (Teder)
 
@@ -204,6 +228,42 @@ venue events (5 pages) vs ~21 when scanning the full Eventim catalog unfiltered.
 The public site homepage (`greenbear-club.com`) is a separate Wix property with
 image cards linking to `greenbear.co.il`; scrape the co.il schedule for full
 metadata (name, time, price).
+
+### WordPress + WooCommerce + bargyora theme (Bar Giyora)
+
+| | |
+|---|---|
+| URL | `https://bar-giyora.co.il` |
+| REST tried | `wp-json/` (no dedicated event routes; WooCommerce store API for prices) |
+| Initial load | Server-rendered homepage — first 9 WooCommerce show products |
+| Endpoint | `POST /wp-admin/admin-ajax.php` — `action=bargyora_products_filter` |
+| Params | `post_ids[]` (exclude seen), `posts_per_page`, `term`, `nonce` (from `.loadbtn`) |
+| Response | `{ html, count }` — HTML product card fragments |
+| Date | Hebrew weekday + `DD.MM.YYYY` in `.performance-con .date` |
+| Time | Door opening: `פתיחת דלתות: HH:mm` |
+| Price | `GET /wp-json/wc/store/v1/products?include={ids}` — batch by `data-post` id |
+| URL | Product permalink `/product/{slug}/` |
+| TLS | Pass `{ insecureTls: true }` when cert chain fails on the network |
+
+Paginate while `post_ids.length < data-total` and each batch returns a full page.
+Homepage load-more uses the same filter action as `/events/` (theme `ajax.js`).
+
+### WordPress events aggregator, no event REST (Muzi Center)
+
+| | |
+|---|---|
+| URL | `https://muzi.co.il/events-by-region/center/` |
+| REST tried | `wp-json/` (no `/wp/v2/event` route), `/wp/v2/event?events_by_region=26` (404), admin-ajax `event_tax_infinite_scroll` (HTML, not JSON) |
+| Source | Paginated archive: `GET /events-by-region/center/page/N/` (~38 pages, 10 events/page) |
+| Date | Section header `data-event-date="YYYYMMDD"` |
+| Time | `.avatar-time` → `תחילת הופעה: HH:mm` |
+| Venue | `.avatar-location` hall name → included in `site` field |
+| Price | `.avatar-cost` → `₪NNN`, `₪A - ₪B` → `from ₪min`, `₪ בקרוב` → `N/A` |
+| URL | `.avatar-name a` → `/event/{slug}/` |
+| Filter | Skip `.events-blocks-promotion` ads; skip dates before today |
+
+Paginate while `<link rel="next">` is present; stop on empty page. Region term
+`center` has id `26` (`GET /wp-json/wp/v2/events_by_region?slug=center`).
 
 ## WordPress generic checklist
 

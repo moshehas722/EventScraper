@@ -47,8 +47,12 @@ The core then filters by day, merges all venues, sorts, and prints.
 | Shablul (Tel Aviv)    | ✅ Working | `GET shablul.smarticket.co.il/api/shows`   |
 | Teder (Tel Aviv)      | ✅ Working | POST `/home?only_content=1` (see below)    |
 | Gray Club (Yehud)     | ✅ Working | admin-ajax `load_more_shows` (see below)   |
+| Gray Club (Modiin)    | ✅ Working | admin-ajax `load_more_shows` (see below)   |
+| Gray Club (Tel Aviv)  | ✅ Working | admin-ajax `load_more_shows` (see below)   |
 | Zappa Club (Israel)   | ✅ Working | Eventim websearch products API (see below) |
 | Green Bear (Hod Hasharon) | ✅ Working | Wix Events warmup JSON on greenbear.co.il (see below) |
+| Muzi (Center)         | ✅ Working | Center region archive pages (see below)      |
+| Bar Giyora (Tel Aviv)     | ✅ Working | admin-ajax `bargyora_products_filter` (see below) |
 
 ## Usage
 
@@ -98,8 +102,12 @@ EventScraper/
       shablul.js     Shablul-specific fetch + normalize
       teder.js       Teder-specific fetch + normalize
       grayyehud.js   Gray Club Yehud-specific fetch + normalize
+      graymodiin.js  Gray Club Modiin-specific fetch + normalize
+      graytelaviv.js Gray Club Tel Aviv-specific fetch + normalize
       zappa.js       Zappa Club-specific fetch + normalize
       greenbear.js   Green Bear-specific fetch + normalize
+      bargiyora.js   Bar Giyora-specific fetch + normalize
+      muzicenter.js  Muzi Center-region fetch + normalize
 ```
 
 Ozen uses three public REST endpoints: Tickera's event list
@@ -154,9 +162,9 @@ items under `/shows/` are excluded. Dates are `DD.MM.YY`; sub-venue (Radio, Rafi
 Romano) appears in the card but is not a separate field. Prices are not in the
 listing or event pages → `N/A`.
 
-Gray Club Yehud uses the grayux theme's admin-ajax load-more
-(`load_more_shows`, `categorytermid=5` for the Yehud location). The first 12
-shows are server-rendered on the location page; each load-more returns JSON with
+Gray Club (Yehud, Modiin, and Tel Aviv) use the grayux theme's admin-ajax load-more
+(`load_more_shows`, `categorytermid=5` for Yehud, `6` for Modiin, `7` for Tel Aviv). The first 12
+shows are server-rendered on each location page; each load-more returns JSON with
 an `htmldata` fragment. Dates are `DD.MM.YYYY`; times are door opening
 (`פתיחת דלתות`). Prices are on individual event/ticket pages → `N/A`.
 
@@ -167,6 +175,23 @@ full event objects in `wix-warmup-data` (`appsWarmupData` → `events.events[]`)
 Dates/times use `scheduling.startTimeFormatted` with the local date derived from
 `scheduling.config.startDate` in `Asia/Jerusalem`. Prices from
 `registration.ticketing.{lowestPrice,highestPrice}`; multiple tiers → `from ₪…`.
+
+Muzi (Center) is a WordPress events aggregator for the central Israel region.
+REST discovery found taxonomy routes (`/wp/v2/events_by_region`) but the `event`
+post type is not exposed via wp-json; admin-ajax infinite scroll returns HTML
+fragments. The scraper paginates the server-rendered archive
+(`/events-by-region/center/`, ~38 pages). Each listing has show time, venue
+hall, and price range; dates come from section headers (`data-event-date`).
+Promoted/ad blocks are skipped. The `site` field includes the venue hall name
+(e.g. `Muzi (Center) (בארבי נמל יפו)`) for filter UX across multiple venues.
+
+Bar Giyora (בר גיורא, Even Gvirol 30 Tel Aviv) is WordPress + WooCommerce with a
+custom bargyora theme. The homepage renders the first 9 upcoming show products;
+additional shows load via admin-ajax (`bargyora_products_filter`, sending
+`post_ids[]` of already-seen products). Dates are Hebrew weekday +
+`DD.MM.YYYY`; times are door opening (`פתיחת דלתות`). Ticket prices come from
+the WooCommerce Store API (`wc/store/v1/products?include=…`) batched by product
+id. The site may require `insecureTls` on networks with TLS interception.
 
 ## Adding a venue
 

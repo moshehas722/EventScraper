@@ -9,11 +9,15 @@ import * as babebar from './sites/babebar.js';
 import * as papaito from './sites/papaito.js';
 import * as shablul from './sites/shablul.js';
 import * as grayyehud from './sites/grayyehud.js';
+import * as graymodiin from './sites/graymodiin.js';
+import * as graytelaviv from './sites/graytelaviv.js';
 import * as teder from './sites/teder.js';
 import * as zappa from './sites/zappa.js';
 import * as greenbear from './sites/greenbear.js';
+import * as bargiyora from './sites/bargiyora.js';
+import * as muzicenter from './sites/muzicenter.js';
 
-export const SITES = [barby, ozen, hameretz2, levontin7, haezor, babebar, papaito, shablul, grayyehud, teder, zappa, greenbear];
+export const SITES = [barby, ozen, hameretz2, levontin7, haezor, babebar, papaito, shablul, grayyehud, graymodiin, graytelaviv, teder, zappa, greenbear, bargiyora, muzicenter];
 
 /**
  * Fetch events from all venues, optionally filtered by date.
