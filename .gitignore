@@ -1,1 +1,3 @@
 scraper-temp/
+node_modules/
+dist/
