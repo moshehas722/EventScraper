@@ -11,8 +11,9 @@ import * as shablul from './sites/shablul.js';
 import * as grayyehud from './sites/grayyehud.js';
 import * as teder from './sites/teder.js';
 import * as zappa from './sites/zappa.js';
+import * as greenbear from './sites/greenbear.js';
 
-export const SITES = [barby, ozen, hameretz2, levontin7, haezor, babebar, papaito, shablul, grayyehud, teder, zappa];
+export const SITES = [barby, ozen, hameretz2, levontin7, haezor, babebar, papaito, shablul, grayyehud, teder, zappa, greenbear];
 
 /**
  * Fetch events from all venues, optionally filtered by date.

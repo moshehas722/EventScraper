@@ -188,6 +188,23 @@ Embedded `#schedule-json` is radio broadcast schedule only (`section: "shows"`),
 Paginate all pages; dedupe by `productId`. `search_term=זאפה` returns ~46 unique Zappa
 venue events (5 pages) vs ~21 when scanning the full Eventim catalog unfiltered.
 
+### Wix Events warmup JSON (Green Bear)
+
+| | |
+|---|---|
+| Marketing URL | `https://www.greenbear-club.com` |
+| Schedule / tickets | `https://www.greenbear.co.il/` (לוח מופעים) |
+| REST tried | `/_api/wix-events-web/v1/events/query` (400 without session), v2 routes (404) |
+| Source | `GET /` — parse `wix-warmup-data` → `appsWarmupData.*.events.events[]` |
+| Date/time | `scheduling.config.startDate` (UTC ISO) + `scheduling.startTimeFormatted` (local display) |
+| Price | `registration.ticketing.lowestPrice` / `highestPrice`; multiple tiers → `from ₪min` |
+| URL | `{origin}/event-details/{slug}` |
+| Filter | Skip events with `date` before today |
+
+The public site homepage (`greenbear-club.com`) is a separate Wix property with
+image cards linking to `greenbear.co.il`; scrape the co.il schedule for full
+metadata (name, time, price).
+
 ## WordPress generic checklist
 
 1. `GET {origin}/wp-json/` — list routes

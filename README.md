@@ -48,6 +48,7 @@ The core then filters by day, merges all venues, sorts, and prints.
 | Teder (Tel Aviv)      | ✅ Working | POST `/home?only_content=1` (see below)    |
 | Gray Club (Yehud)     | ✅ Working | admin-ajax `load_more_shows` (see below)   |
 | Zappa Club (Israel)   | ✅ Working | Eventim websearch products API (see below) |
+| Green Bear (Hod Hasharon) | ✅ Working | Wix Events warmup JSON on greenbear.co.il (see below) |
 
 ## Usage
 
@@ -98,6 +99,7 @@ EventScraper/
       teder.js       Teder-specific fetch + normalize
       grayyehud.js   Gray Club Yehud-specific fetch + normalize
       zappa.js       Zappa Club-specific fetch + normalize
+      greenbear.js   Green Bear-specific fetch + normalize
 ```
 
 Ozen uses three public REST endpoints: Tickera's event list
@@ -157,6 +159,14 @@ Gray Club Yehud uses the grayux theme's admin-ajax load-more
 shows are server-rendered on the location page; each load-more returns JSON with
 an `htmldata` fragment. Dates are `DD.MM.YYYY`; times are door opening
 (`פתיחת דלתות`). Prices are on individual event/ticket pages → `N/A`.
+
+Green Bear (הדוב הירוק, Hod Hasharon) is a Wix site. The marketing homepage
+(`greenbear-club.com`) links to ticket pages on `greenbear.co.il`. Public Wix
+Events REST query endpoints require session tokens; the schedule page SSR embeds
+full event objects in `wix-warmup-data` (`appsWarmupData` → `events.events[]`).
+Dates/times use `scheduling.startTimeFormatted` with the local date derived from
+`scheduling.config.startDate` in `Asia/Jerusalem`. Prices from
+`registration.ticketing.{lowestPrice,highestPrice}`; multiple tiers → `from ₪…`.
 
 ## Adding a venue
 
