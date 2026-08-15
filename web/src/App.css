@@ -358,6 +358,12 @@
   height: 1rem;
 }
 
+.fetch-actions {
+  display: inline-flex;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
 .fetch-btn {
   display: inline-flex;
   align-items: center;
@@ -370,7 +376,6 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
-  margin-left: auto;
 }
 
 .fetch-btn:hover:not(:disabled) {
@@ -380,6 +385,17 @@
 .fetch-btn:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+.fetch-btn--secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.fetch-btn--secondary:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text);
 }
 
 .spinner {
@@ -534,10 +550,15 @@
 }
 
 @media (max-width: 640px) {
+  .fetch-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .fetch-btn {
+    flex: 1;
     width: 100%;
     justify-content: center;
-    margin-left: 0;
   }
 
   .controls-row {

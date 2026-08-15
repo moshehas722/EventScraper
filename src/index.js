@@ -2,25 +2,28 @@
 // Event scraper CLI.
 //
 // Usage:
-//   node src/index.js [YYYY-MM-DD] [--all] [--json]
+//   node src/index.js [YYYY-MM-DD] [--all] [--json] [--vercel]
 //
 //   (no date)        list events for today
 //   YYYY-MM-DD       list events for that specific day
 //   --all            ignore the date filter, list every upcoming event
 //   --json           output raw JSON instead of a formatted table
+//   --vercel         also upload the events JSON to Vercel Blob
 //
 // Add more sites by dropping a module in src/sites/ that exports
 // { meta, fetchEvents } and registering it in src/registry.js.
 
 import { scrapeEvents, todayIso } from './registry.js';
 import { setProgressQuiet } from './progress.js';
+import { uploadEventsToBlob } from './blob.js';
 
 function parseArgs(argv) {
-  const opts = { date: todayIso(), all: false, json: false, quiet: false };
+  const opts = { date: todayIso(), all: false, json: false, quiet: false, vercel: false };
   for (const arg of argv) {
     if (arg === '--all') opts.all = true;
     else if (arg === '--json') opts.json = true;
     else if (arg === '--quiet' || arg === '-q') opts.quiet = true;
+    else if (arg === '--vercel') opts.vercel = true;
     else if (/^\d{4}-\d{2}-\d{2}$/.test(arg)) opts.date = arg;
     else if (arg === '--help' || arg === '-h') opts.help = true;
     else console.error(`Ignoring unrecognized argument: ${arg}`);
@@ -32,12 +35,13 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
     console.log(
-      'Usage: node src/index.js [YYYY-MM-DD] [--all] [--json]\n' +
+      'Usage: node src/index.js [YYYY-MM-DD] [--all] [--json] [--vercel]\n' +
         '  (no date)   events for today\n' +
         '  YYYY-MM-DD  events for that day\n' +
         '  --all       every upcoming event\n' +
         '  --json      raw JSON output\n' +
-        '  --quiet     suppress progress messages',
+        '  --quiet     suppress progress messages\n' +
+        '  --vercel    also upload the events JSON to Vercel Blob',
     );
     return;
   }
@@ -47,10 +51,14 @@ async function main() {
 
   if (opts.json) {
     console.log(JSON.stringify(events, null, 2));
-    return;
+  } else {
+    printTable(events, opts);
   }
 
-  printTable(events, opts);
+  if (opts.vercel) {
+    const blob = await uploadEventsToBlob(events, opts);
+    console.log(`Uploaded to Vercel Blob: ${blob.pathname}`);
+  }
 }
 
 function printTable(events, opts) {

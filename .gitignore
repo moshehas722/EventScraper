@@ -1,3 +1,5 @@
 scraper-temp/
 node_modules/
 dist/
+.vercel
+.env*

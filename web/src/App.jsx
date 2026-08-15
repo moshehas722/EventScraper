@@ -126,6 +126,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
+  const [source, setSource] = useState(/** @type {'scrape' | 'blob' | null} */ (null));
+  const [snapshotUploadedAt, setSnapshotUploadedAt] = useState(/** @type {Date | null} */ (null));
   const [siteMeta, setSiteMeta] = useState([]);
 
   useEffect(() => {
@@ -198,11 +200,11 @@ export default function App() {
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
 
-  const fetchEvents = useCallback(async () => {
+  const loadEvents = useCallback(async (endpoint, sourceKind) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/events?all=true');
+      const res = await fetch(endpoint);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Request failed (${res.status})`);
@@ -215,14 +217,27 @@ export default function App() {
         mergeSourceSelection(stored?.selectedSources, fetchedSources),
       );
       setLastFetched(new Date());
+      setSource(sourceKind);
+      setSnapshotUploadedAt(data.uploadedAt ? new Date(data.uploadedAt) : null);
     } catch (err) {
       setError(err.message);
       setEvents([]);
       setSelectedSources(new Set());
+      setSource(null);
+      setSnapshotUploadedAt(null);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const fetchEvents = useCallback(
+    () => loadEvents('/api/events?all=true', 'scrape'),
+    [loadEvents],
+  );
+  const loadFromBlob = useCallback(
+    () => loadEvents('/api/events/blob?all=true', 'blob'),
+    [loadEvents],
+  );
 
   const scopeLabel = dateFilterLabel(dateFilter, date);
   const filterActive = sourceFilterActive;
@@ -395,26 +410,46 @@ export default function App() {
               </label>
             )}
 
-            <button
-              type="button"
-              className="fetch-btn"
-              onClick={fetchEvents}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner" aria-hidden />
-                  Scraping…
-                </>
-              ) : (
-                'Fetch events'
-              )}
-            </button>
+            <div className="fetch-actions">
+              <button
+                type="button"
+                className="fetch-btn fetch-btn--secondary"
+                onClick={loadFromBlob}
+                disabled={loading}
+              >
+                {loading && source === 'blob' ? (
+                  <>
+                    <span className="spinner" aria-hidden />
+                    Loading…
+                  </>
+                ) : (
+                  'Load from Blob'
+                )}
+              </button>
+              <button
+                type="button"
+                className="fetch-btn"
+                onClick={fetchEvents}
+                disabled={loading}
+              >
+                {loading && source !== 'blob' ? (
+                  <>
+                    <span className="spinner" aria-hidden />
+                    Scraping…
+                  </>
+                ) : (
+                  'Fetch events'
+                )}
+              </button>
+            </div>
           </div>
 
           {lastFetched && !loading && (
             <p className="meta">
-              Last updated {lastFetched.toLocaleTimeString()} —{' '}
+              {source === 'blob'
+                ? `Loaded saved snapshot${snapshotUploadedAt ? ` from ${snapshotUploadedAt.toLocaleString()}` : ''}`
+                : `Last updated ${lastFetched.toLocaleTimeString()}`}
+              {' — '}
               {filterActive ? `${displayCount} of ${scopeCount}` : displayCount}{' '}
               event{displayCount === 1 ? '' : 's'} for {scopeLabel}
               {filterActive && ' (filtered by source)'}
@@ -434,7 +469,11 @@ export default function App() {
         <section className="results card">
           {!lastFetched && !loading && (
             <div className="empty-state">
-              <p>Click <strong>Fetch events</strong> to scrape all venues, then filter by date or source.</p>
+              <p>
+                Click <strong>Fetch events</strong> to scrape all venues live, or{' '}
+                <strong>Load from Blob</strong> to load the last saved snapshot — then filter by
+                date or source.
+              </p>
             </div>
           )}
 

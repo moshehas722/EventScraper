@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scrapeEvents, todayIso, SITES } from './registry.js';
+import { downloadEventsFromBlob } from './blob.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -41,6 +42,31 @@ app.get('/api/events', async (req, res) => {
   } catch (err) {
     console.error('Scrape failed:', err);
     res.status(500).json({ error: err.message ?? 'Scrape failed' });
+  }
+});
+
+app.get('/api/events/blob', async (req, res) => {
+  const all = req.query.all === 'true' || req.query.all === '1';
+  const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+    ? req.query.date
+    : todayIso();
+
+  try {
+    const snapshot = await downloadEventsFromBlob({ date, all });
+    if (!snapshot) {
+      return res.status(404).json({ error: 'No saved snapshot found in Blob storage' });
+    }
+    res.json({
+      date: all ? null : date,
+      all,
+      count: snapshot.events.length,
+      events: snapshot.events,
+      uploadedAt: snapshot.uploadedAt,
+      source: 'blob',
+    });
+  } catch (err) {
+    console.error('Blob load failed:', err);
+    res.status(500).json({ error: err.message ?? 'Blob load failed' });
   }
 });
 

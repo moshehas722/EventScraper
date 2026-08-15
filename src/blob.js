@@ -1,0 +1,62 @@
+// Uploads/downloads scraped events JSON to/from the eventscraper-blob Vercel Blob store.
+
+import { get, put } from '@vercel/blob';
+
+function loadLocalEnv() {
+  if (process.env.BLOB_READ_WRITE_TOKEN) return;
+  try {
+    process.loadEnvFile('.env.local');
+  } catch {
+    // no .env.local present; rely on already-set environment variables
+  }
+}
+
+function requireToken() {
+  loadLocalEnv();
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw new Error(
+      'BLOB_READ_WRITE_TOKEN is not set. Add it to .env.local (see the Blob store\'s ' +
+        'Quickstart tab in the Vercel dashboard for the real value).',
+    );
+  }
+  return process.env.BLOB_READ_WRITE_TOKEN;
+}
+
+function eventsPathname({ date, all }) {
+  return all ? 'events/all.json' : `events/${date}.json`;
+}
+
+/**
+ * Upload events JSON to Vercel Blob. Private access — readable by anyone
+ * holding BLOB_READ_WRITE_TOKEN (the deployed site, or a local dev session
+ * that has the token in .env.local).
+ * @param {Array} events
+ * @param {{ date: string, all: boolean }} opts
+ * @returns {Promise<{ url: string, pathname: string }>}
+ */
+export async function uploadEventsToBlob(events, opts) {
+  const token = requireToken();
+  return put(eventsPathname(opts), JSON.stringify(events, null, 2), {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
+    token,
+  });
+}
+
+/**
+ * Load the last-uploaded events JSON snapshot from Vercel Blob.
+ * @param {{ date: string, all: boolean }} opts
+ * @returns {Promise<{ events: Array, uploadedAt: Date, pathname: string } | null>}
+ *   Resolves to null if no snapshot has been uploaded for that scope yet.
+ */
+export async function downloadEventsFromBlob(opts) {
+  const token = requireToken();
+  const pathname = eventsPathname(opts);
+  const result = await get(pathname, { access: 'private', token });
+  if (!result) return null;
+
+  const text = await new Response(result.stream).text();
+  return { events: JSON.parse(text), uploadedAt: result.blob.uploadedAt, pathname };
+}
