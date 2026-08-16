@@ -1,0 +1,12 @@
+node_modules
+web
+.git
+.github
+.claude
+.vercel
+.env*
+scraper-temp
+dist
+scripts
+whatsapp-plugins
+README.md

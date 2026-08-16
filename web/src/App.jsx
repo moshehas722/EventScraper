@@ -112,6 +112,10 @@ function GroupCheckbox({ checked, indeterminate, onChange, label }) {
   );
 }
 
+// Live scraping talks to the local Express API (proxied by Vite in dev) —
+// there's no such backend on the deployed (Vercel) build, only Blob storage.
+const liveScrapeEnabled = import.meta.env.DEV;
+
 export default function App() {
   const initialUi = useMemo(() => loadUiState(), []);
 
@@ -131,6 +135,7 @@ export default function App() {
   const [siteMeta, setSiteMeta] = useState([]);
 
   useEffect(() => {
+    if (!liveScrapeEnabled) return;
     fetch('/api/sites')
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setSiteMeta(Array.isArray(data) ? data : []))
@@ -413,7 +418,7 @@ export default function App() {
             <div className="fetch-actions">
               <button
                 type="button"
-                className="fetch-btn fetch-btn--secondary"
+                className={`fetch-btn${liveScrapeEnabled ? ' fetch-btn--secondary' : ''}`}
                 onClick={loadFromBlob}
                 disabled={loading}
               >
@@ -426,21 +431,23 @@ export default function App() {
                   'Load from Blob'
                 )}
               </button>
-              <button
-                type="button"
-                className="fetch-btn"
-                onClick={fetchEvents}
-                disabled={loading}
-              >
-                {loading && source !== 'blob' ? (
-                  <>
-                    <span className="spinner" aria-hidden />
-                    Scraping…
-                  </>
-                ) : (
-                  'Fetch events'
-                )}
-              </button>
+              {liveScrapeEnabled && (
+                <button
+                  type="button"
+                  className="fetch-btn"
+                  onClick={fetchEvents}
+                  disabled={loading}
+                >
+                  {loading && source !== 'blob' ? (
+                    <>
+                      <span className="spinner" aria-hidden />
+                      Scraping…
+                    </>
+                  ) : (
+                    'Fetch events'
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
@@ -470,9 +477,18 @@ export default function App() {
           {!lastFetched && !loading && (
             <div className="empty-state">
               <p>
-                Click <strong>Fetch events</strong> to scrape all venues live, or{' '}
-                <strong>Load from Blob</strong> to load the last saved snapshot — then filter by
-                date or source.
+                {liveScrapeEnabled ? (
+                  <>
+                    Click <strong>Fetch events</strong> to scrape all venues live, or{' '}
+                    <strong>Load from Blob</strong> to load the last saved snapshot — then filter
+                    by date or source.
+                  </>
+                ) : (
+                  <>
+                    Click <strong>Load from Blob</strong> to load the last saved snapshot, then
+                    filter by date or source.
+                  </>
+                )}
               </p>
             </div>
           )}
