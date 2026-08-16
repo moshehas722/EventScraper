@@ -244,6 +244,11 @@ export default function App() {
     [loadEvents],
   );
 
+  useEffect(() => {
+    loadFromBlob();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const scopeLabel = dateFilterLabel(dateFilter, date);
   const filterActive = sourceFilterActive;
   const displayCount = filteredEvents.length;
@@ -415,23 +420,8 @@ export default function App() {
               </label>
             )}
 
-            <div className="fetch-actions">
-              <button
-                type="button"
-                className={`fetch-btn${liveScrapeEnabled ? ' fetch-btn--secondary' : ''}`}
-                onClick={loadFromBlob}
-                disabled={loading}
-              >
-                {loading && source === 'blob' ? (
-                  <>
-                    <span className="spinner" aria-hidden />
-                    Loading…
-                  </>
-                ) : (
-                  'Load from Blob'
-                )}
-              </button>
-              {liveScrapeEnabled && (
+            {liveScrapeEnabled && (
+              <div className="fetch-actions">
                 <button
                   type="button"
                   className="fetch-btn"
@@ -447,8 +437,8 @@ export default function App() {
                     'Fetch events'
                   )}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {lastFetched && !loading && (
@@ -465,6 +455,9 @@ export default function App() {
               )}
             </p>
           )}
+          {loading && !lastFetched && (
+            <p className="meta">Loading the latest snapshot…</p>
+          )}
         </section>
 
         {error && (
@@ -474,22 +467,9 @@ export default function App() {
         )}
 
         <section className="results card">
-          {!lastFetched && !loading && (
+          {!lastFetched && !loading && !error && (
             <div className="empty-state">
-              <p>
-                {liveScrapeEnabled ? (
-                  <>
-                    Click <strong>Fetch events</strong> to scrape all venues live, or{' '}
-                    <strong>Load from Blob</strong> to load the last saved snapshot — then filter
-                    by date or source.
-                  </>
-                ) : (
-                  <>
-                    Click <strong>Load from Blob</strong> to load the last saved snapshot, then
-                    filter by date or source.
-                  </>
-                )}
-              </p>
+              <p>No events loaded yet.</p>
             </div>
           )}
 
