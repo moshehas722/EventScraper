@@ -5,7 +5,7 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scrapeEvents, todayIso, SITES } from './registry.js';
-import { downloadEventsFromBlob } from './blob.js';
+import { downloadEventsFromBlob, downloadFavoritesFromBlob, uploadFavoritesToBlob } from './blob.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -67,6 +67,34 @@ app.get('/api/events/blob', async (req, res) => {
   } catch (err) {
     console.error('Blob load failed:', err);
     res.status(500).json({ error: err.message ?? 'Blob load failed' });
+  }
+});
+
+app.get('/api/favorites', async (_req, res) => {
+  try {
+    const favorites = await downloadFavoritesFromBlob();
+    res.json({ favorites });
+  } catch (err) {
+    console.error('Favorites load failed:', err);
+    res.status(500).json({ error: err.message ?? 'Favorites load failed' });
+  }
+});
+
+app.put('/api/favorites', async (req, res) => {
+  const { favorites } = req.body ?? {};
+  if (!Array.isArray(favorites)) {
+    return res.status(400).json({ error: 'Body must be { favorites: [...] }' });
+  }
+
+  const today = todayIso();
+  const upcoming = favorites.filter((f) => f.date >= today);
+
+  try {
+    await uploadFavoritesToBlob(upcoming);
+    res.json({ favorites: upcoming });
+  } catch (err) {
+    console.error('Favorites save failed:', err);
+    res.status(500).json({ error: err.message ?? 'Favorites save failed' });
   }
 });
 

@@ -6,6 +6,13 @@ import {
   mergeSourceSelection,
   saveUiState,
 } from './sourceGroups.js';
+import {
+  daysUntil,
+  formatDaysLeft,
+  mergeFavoriteWithLiveEvent,
+  sortFavorites,
+  toFavoriteRecord,
+} from './favorites.js';
 import './App.css';
 
 function todayIso() {
@@ -133,6 +140,9 @@ export default function App() {
   const [source, setSource] = useState(/** @type {'scrape' | 'blob' | null} */ (null));
   const [snapshotUploadedAt, setSnapshotUploadedAt] = useState(/** @type {Date | null} */ (null));
   const [siteMeta, setSiteMeta] = useState([]);
+  const [favorites, setFavorites] = useState(/** @type {Array} */ ([]));
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [favoritesError, setFavoritesError] = useState(null);
   // Guards against the initial (still-empty) render's state overwriting the
   // saved selection in localStorage before the auto-load-on-mount fetch resolves.
   const hydratedRef = useRef(false);
@@ -154,11 +164,83 @@ export default function App() {
     saveUiState({ selectedSources, knownSources, multiSelect, collapsedGroups });
   }, [events, selectedSources, multiSelect, collapsedGroups]);
 
+  // Guards toggleFavorite against running before the initial GET resolves —
+  // otherwise a click that races the load would save based on a stale
+  // (often empty) list and silently wipe out existing favorites.
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  // Only the most recently issued PUT's response is allowed to reconcile
+  // local state, so an older response completing after a newer one (out of
+  // order) can't clobber a more recent click.
+  const persistRequestIdRef = useRef(0);
+  // StrictMode (dev only) double-invokes this effect, which would otherwise
+  // fire two concurrent GETs — the second one resolving after a user's click
+  // could overwrite it back to the pre-click state. Only the first
+  // invocation's fetch is allowed to actually run.
+  const favoritesLoadStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (favoritesLoadStartedRef.current) return;
+    favoritesLoadStartedRef.current = true;
+    fetch('/api/favorites')
+      .then((res) => (res.ok ? res.json() : { favorites: [] }))
+      .then((data) => setFavorites(Array.isArray(data.favorites) ? data.favorites : []))
+      .catch(() => {})
+      .finally(() => setFavoritesLoaded(true));
+  }, []);
+
+  const persistFavorites = useCallback(async (next) => {
+    const requestId = ++persistRequestIdRef.current;
+    try {
+      setFavoritesError(null);
+      const res = await fetch('/api/favorites', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favorites: next }),
+        // Let the save finish even if the page is refreshed/unloaded right
+        // after clicking the heart, instead of the browser aborting it.
+        keepalive: true,
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      // Server strips past-dated entries — reconcile local state to match
+      // what actually got saved, but only if no newer request has since
+      // superseded this one.
+      if (requestId === persistRequestIdRef.current && Array.isArray(data.favorites)) {
+        setFavorites(data.favorites);
+      }
+    } catch {
+      setFavoritesError('Failed to save favorites — try again.');
+    }
+  }, []);
+
+  const toggleFavorite = useCallback(
+    (event) => {
+      if (!favoritesLoaded) return;
+      const exists = favorites.some((f) => f.url === event.url);
+      const next = exists
+        ? favorites.filter((f) => f.url !== event.url)
+        : [...favorites, toFavoriteRecord(event)];
+      setFavorites(next);
+      persistFavorites(next);
+    },
+    [favorites, favoritesLoaded, persistFavorites],
+  );
+
   const sources = [...new Set(events.map((e) => e.site))].sort((a, b) => a.localeCompare(b));
   const sourceGroups = useMemo(
     () => buildSourceGroups(sources, siteMeta),
     [sources, siteMeta],
   );
+
+  const favoriteUrls = useMemo(() => new Set(favorites.map((f) => f.url)), [favorites]);
+  const sortedFavorites = useMemo(() => {
+    const today = todayIso();
+    const enriched = favorites.map((f) => {
+      const merged = mergeFavoriteWithLiveEvent(f, events);
+      return { ...merged, daysUntil: daysUntil(today, merged.date) };
+    });
+    return sortFavorites(enriched, today);
+  }, [favorites, events]);
 
   const toggleSource = (name) => {
     setSelectedSources((prev) => {
@@ -306,8 +388,81 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <h1>What's Happening...</h1>
+          <button
+            type="button"
+            className="favorites-toggle"
+            aria-pressed={favoritesOpen}
+            aria-expanded={favoritesOpen}
+            onClick={() => setFavoritesOpen((v) => !v)}
+          >
+            <span className="favorites-toggle-icon" aria-hidden>
+              ♥
+            </span>
+            Favorites
+            {favorites.length > 0 && (
+              <span className="favorites-count">{favorites.length}</span>
+            )}
+          </button>
         </div>
       </header>
+
+      {favoritesOpen && (
+        <div className="favorites-panel" role="dialog" aria-label="Favorites">
+          <div className="favorites-panel-header">
+            <h2>Favorites</h2>
+            <button
+              type="button"
+              className="favorites-panel-close"
+              aria-label="Close favorites"
+              onClick={() => setFavoritesOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+
+          {favoritesError && <p className="favorites-panel-error">{favoritesError}</p>}
+
+          {sortedFavorites.length === 0 ? (
+            <p className="favorites-panel-empty">
+              No favorites yet — tap the heart on any event to save it here.
+            </p>
+          ) : (
+            <ul className="favorites-list">
+              {sortedFavorites.map((f) => (
+                <li key={f.url} className="favorites-item">
+                  <button
+                    type="button"
+                    className="favorite-btn favorite-btn--active"
+                    aria-label={`Remove ${f.name} from favorites`}
+                    onClick={() => toggleFavorite(f)}
+                  >
+                    ♥
+                  </button>
+                  <div className="favorites-item-body">
+                    <a
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="favorites-item-name"
+                    >
+                      {f.name}
+                    </a>
+                    <div className="favorites-item-meta">
+                      <span className="favorites-item-days">{formatDaysLeft(f.daysUntil)}</span>
+                      <span aria-hidden>·</span>
+                      <span>
+                        {formatMonthDay(f.date)} {f.time}
+                      </span>
+                      <span aria-hidden>·</span>
+                      <span>{f.site}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="app-body">
         {lastFetched && sources.length > 0 && (
@@ -564,6 +719,20 @@ export default function App() {
                         <span>{e.site}</span>
                       </td>
                       <td className="name-cell">
+                        <button
+                          type="button"
+                          className={`favorite-btn${favoriteUrls.has(e.url) ? ' favorite-btn--active' : ''}`}
+                          aria-pressed={favoriteUrls.has(e.url)}
+                          disabled={!favoritesLoaded}
+                          aria-label={
+                            favoriteUrls.has(e.url)
+                              ? `Remove ${e.name} from favorites`
+                              : `Add ${e.name} to favorites`
+                          }
+                          onClick={() => toggleFavorite(e)}
+                        >
+                          {favoriteUrls.has(e.url) ? '♥' : '♡'}
+                        </button>
                         <a href={e.url} target="_blank" rel="noopener noreferrer">
                           {e.name}
                         </a>

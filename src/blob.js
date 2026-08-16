@@ -60,3 +60,37 @@ export async function downloadEventsFromBlob(opts) {
   const text = await new Response(result.stream).text();
   return { events: JSON.parse(text), uploadedAt: result.blob.uploadedAt, pathname };
 }
+
+const FAVORITES_PATHNAME = 'favorites/favorites.json';
+
+/**
+ * Load the saved favorites list from Vercel Blob — a separate file from the
+ * events snapshot so it survives scraper re-runs.
+ * @returns {Promise<Array>} empty array if nothing has been saved yet
+ */
+export async function downloadFavoritesFromBlob() {
+  const token = requireToken();
+  // Bypass the CDN cache — favorites are read right after being written
+  // (click, then refresh), so a cached response can look like a lost save.
+  const result = await get(FAVORITES_PATHNAME, { access: 'private', token, useCache: false });
+  if (!result) return [];
+
+  const text = await new Response(result.stream).text();
+  const parsed = JSON.parse(text);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/**
+ * Overwrite the saved favorites list in Vercel Blob.
+ * @param {Array} favorites
+ */
+export async function uploadFavoritesToBlob(favorites) {
+  const token = requireToken();
+  return put(FAVORITES_PATHNAME, JSON.stringify(favorites, null, 2), {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
+    token,
+  });
+}
