@@ -18,6 +18,9 @@ jobs:
         run: docker build -t eventscraper-scraper .
 
       - name: Restart container
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          BLOB_STORE_ID: ${{ secrets.BLOB_STORE_ID }}
         run: |
           docker stop eventscraper-scraper || true
           docker rm eventscraper-scraper || true
@@ -25,7 +28,8 @@ jobs:
             --name eventscraper-scraper \
             --restart unless-stopped \
             -p 3001:3001 \
-            --env-file /etc/eventscraper-secrets/eventscraper.env \
+            -e BLOB_READ_WRITE_TOKEN \
+            -e BLOB_STORE_ID \
             eventscraper-scraper
 
       - name: Health check
