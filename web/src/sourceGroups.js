@@ -2,7 +2,7 @@ import { resolveSiteOrigin } from './siteOrigins.js';
 
 export const STORAGE_KEY = 'eventscraper-ui';
 
-/** @typedef {{ selectedSources: string[] | null, multiSelect: boolean, collapsedGroups: Set<string> }} UiState */
+/** @typedef {{ selectedSources: string[] | null, knownSources: string[] | null, multiSelect: boolean, collapsedGroups: Set<string> }} UiState */
 
 /** @returns {UiState | null} */
 export function loadUiState() {
@@ -12,6 +12,7 @@ export function loadUiState() {
     const data = JSON.parse(raw);
     return {
       selectedSources: Array.isArray(data.selectedSources) ? data.selectedSources : null,
+      knownSources: Array.isArray(data.knownSources) ? data.knownSources : null,
       multiSelect: typeof data.multiSelect === 'boolean' ? data.multiSelect : true,
       collapsedGroups: new Set(
         Array.isArray(data.collapsedGroups) ? data.collapsedGroups : [],
@@ -22,13 +23,16 @@ export function loadUiState() {
   }
 }
 
-/** @param {{ selectedSources: Set<string>, multiSelect: boolean, collapsedGroups: Set<string> }} state */
-export function saveUiState({ selectedSources, multiSelect, collapsedGroups }) {
+/**
+ * @param {{ selectedSources: Set<string>, knownSources: string[], multiSelect: boolean, collapsedGroups: Set<string> }} state
+ */
+export function saveUiState({ selectedSources, knownSources, multiSelect, collapsedGroups }) {
   try {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         selectedSources: [...selectedSources],
+        knownSources,
         multiSelect,
         collapsedGroups: [...collapsedGroups],
       }),
@@ -165,22 +169,23 @@ export function buildSourceGroups(sourceNames, siteMeta = []) {
 }
 
 /**
- * Restore stored selection, drop stale names, optionally select newly appeared sources.
+ * Restore stored selection: keep it exactly as last saved (dropping sources that
+ * no longer exist), except for sources that have never been seen before — those
+ * default to selected so newly-added venues show up automatically.
  * @param {string[] | null | undefined} storedNames
  * @param {string[]} currentSources
- * @param {{ defaultNewSelected?: boolean }} [opts]
+ * @param {string[] | null | undefined} [knownSources] sources seen as of the last save
  */
-export function mergeSourceSelection(storedNames, currentSources, { defaultNewSelected = true } = {}) {
+export function mergeSourceSelection(storedNames, currentSources, knownSources) {
   const current = new Set(currentSources);
   if (!storedNames?.length) {
     return new Set(currentSources);
   }
 
+  const known = new Set(knownSources ?? []);
   const merged = new Set(storedNames.filter((s) => current.has(s)));
-  if (defaultNewSelected) {
-    for (const s of currentSources) {
-      if (!merged.has(s)) merged.add(s);
-    }
+  for (const s of currentSources) {
+    if (!merged.has(s) && !known.has(s)) merged.add(s);
   }
   return merged;
 }

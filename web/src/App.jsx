@@ -133,6 +133,12 @@ export default function App() {
   const [source, setSource] = useState(/** @type {'scrape' | 'blob' | null} */ (null));
   const [snapshotUploadedAt, setSnapshotUploadedAt] = useState(/** @type {Date | null} */ (null));
   const [siteMeta, setSiteMeta] = useState([]);
+  // Guards against the initial (still-empty) render's state overwriting the
+  // saved selection in localStorage before the auto-load-on-mount fetch resolves.
+  const hydratedRef = useRef(false);
+  // Remembers the last multi-selection so turning "Multiple selection" back on
+  // restores it, instead of being stuck with whatever single item was left.
+  const multiSelectionBackupRef = useRef(/** @type {Set<string> | null} */ (null));
 
   useEffect(() => {
     if (!liveScrapeEnabled) return;
@@ -143,8 +149,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    saveUiState({ selectedSources, multiSelect, collapsedGroups });
-  }, [selectedSources, multiSelect, collapsedGroups]);
+    if (!hydratedRef.current) return;
+    const knownSources = [...new Set(events.map((e) => e.site))];
+    saveUiState({ selectedSources, knownSources, multiSelect, collapsedGroups });
+  }, [events, selectedSources, multiSelect, collapsedGroups]);
 
   const sources = [...new Set(events.map((e) => e.site))].sort((a, b) => a.localeCompare(b));
   const sourceGroups = useMemo(
@@ -219,7 +227,7 @@ export default function App() {
       const stored = loadUiState();
       setEvents(data.events);
       setSelectedSources(
-        mergeSourceSelection(stored?.selectedSources, fetchedSources),
+        mergeSourceSelection(stored?.selectedSources, fetchedSources, stored?.knownSources),
       );
       setLastFetched(new Date());
       setSource(sourceKind);
@@ -231,6 +239,7 @@ export default function App() {
       setSource(null);
       setSnapshotUploadedAt(null);
     } finally {
+      hydratedRef.current = true;
       setLoading(false);
     }
   }, []);
@@ -259,24 +268,35 @@ export default function App() {
     const siteIcon = faviconUrl(resolveSiteOrigin(name, siteMeta));
     return (
       <li key={name} className={nested ? 'source-group-item' : undefined}>
-        <button
-          type="button"
-          className={`source-item${selected ? ' source-item--selected' : ''}${nested ? ' source-item--nested' : ''}`}
-          aria-pressed={selected}
-          onClick={() => toggleSource(name)}
-        >
-          {!nested && siteIcon && (
-            <img
-              src={siteIcon}
-              alt=""
-              className="site-icon"
-              width={16}
-              height={16}
-              loading="lazy"
+        <div className="source-item-row">
+          {multiSelect && (
+            <input
+              type="checkbox"
+              className="source-item-checkbox"
+              checked={selected}
+              aria-label={`${selected ? 'Deselect' : 'Select'} ${name}`}
+              onChange={() => toggleSource(name)}
             />
           )}
-          <span className="source-item-name">{name}</span>
-        </button>
+          <button
+            type="button"
+            className={`source-item${selected ? ' source-item--selected' : ''}${nested ? ' source-item--nested' : ''}`}
+            aria-pressed={selected}
+            onClick={() => toggleSource(name)}
+          >
+            {!nested && siteIcon && (
+              <img
+                src={siteIcon}
+                alt=""
+                className="site-icon"
+                width={16}
+                height={16}
+                loading="lazy"
+              />
+            )}
+            <span className="source-item-name">{name}</span>
+          </button>
+        </div>
       </li>
     );
   };
@@ -285,7 +305,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="header-inner">
-          <h1>EventScraper</h1>
+          <h1>What's Happening...</h1>
         </div>
       </header>
 
@@ -315,9 +335,16 @@ export default function App() {
                     if (!on) {
                       setSelectedSources((prev) => {
                         if (prev.size <= 1) return prev;
+                        multiSelectionBackupRef.current = prev;
                         const first = sources.find((s) => prev.has(s));
                         return first ? new Set([first]) : new Set();
                       });
+                    } else if (multiSelectionBackupRef.current) {
+                      const restored = new Set(
+                        [...multiSelectionBackupRef.current].filter((s) => sources.includes(s)),
+                      );
+                      multiSelectionBackupRef.current = null;
+                      if (restored.size > 0) setSelectedSources(restored);
                     }
                   }}
                 />
@@ -339,12 +366,14 @@ export default function App() {
                 return (
                   <li key={group.key} className="source-group">
                     <div className="source-group-header">
-                      <GroupCheckbox
-                        checked={allSelected}
-                        indeterminate={someSelected}
-                        label={`${allSelected ? 'Deselect' : 'Select'} all in ${group.label}`}
-                        onChange={() => toggleGroup(group)}
-                      />
+                      {multiSelect && (
+                        <GroupCheckbox
+                          checked={allSelected}
+                          indeterminate={someSelected}
+                          label={`${allSelected ? 'Deselect' : 'Select'} all in ${group.label}`}
+                          onChange={() => toggleGroup(group)}
+                        />
+                      )}
                       <button
                         type="button"
                         className="source-group-toggle"

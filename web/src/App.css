@@ -179,11 +179,27 @@
   padding: 0.4rem 0.55rem;
 }
 
+.source-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.source-item-checkbox {
+  accent-color: var(--accent);
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
 .source-item {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 0.5rem 0.65rem;
   border: 1px solid transparent;
   border-radius: 8px;
