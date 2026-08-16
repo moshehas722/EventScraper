@@ -563,6 +563,30 @@
   .source-list {
     max-height: 12rem;
   }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .header-inner {
+    padding: 0.6rem 1rem;
+  }
+
+  /* Bigger touch targets for checkboxes and list rows */
+  .source-item-checkbox,
+  .source-group-checkbox {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .source-item,
+  .source-group-toggle {
+    padding: 0.6rem 0.65rem;
+  }
+
+  .filter-segment-btn {
+    padding: 0.55rem 0.8rem;
+  }
 }
 
 @media (max-width: 640px) {
@@ -580,5 +604,86 @@
   .controls-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .date-filter,
+  .field {
+    width: 100%;
+  }
+
+  .field input[type='date'] {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .date-picker-row {
+    flex-wrap: wrap;
+  }
+
+  /* Reflow the events table into stacked cards instead of a scrolling table */
+  .table-wrap {
+    overflow-x: visible;
+    margin: 0;
+  }
+
+  .events-table {
+    display: block;
+  }
+
+  .events-table thead {
+    display: none;
+  }
+
+  .events-table tbody {
+    display: block;
+  }
+
+  .events-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.6rem;
+    row-gap: 0.3rem;
+    padding: 0.9rem 0.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .events-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .events-table td {
+    display: block;
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .name-cell {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .name-cell a {
+    font-size: 0.98rem;
+  }
+
+  .date-cell {
+    order: 2;
+    flex-direction: row;
+    gap: 0.35rem;
+  }
+
+  .time-cell {
+    order: 3;
+  }
+
+  .price-cell {
+    order: 4;
+    margin-left: auto;
+  }
+
+  .site-cell {
+    order: 5;
+    flex-basis: 100%;
   }
 }
