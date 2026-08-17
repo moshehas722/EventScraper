@@ -9,7 +9,9 @@ import {
 import {
   daysUntil,
   formatDaysLeft,
+  getUpcomingFavoritesHighlight,
   mergeFavoriteWithLiveEvent,
+  upcomingHighlightKey,
   sortFavorites,
   toFavoriteRecord,
 } from './favorites.js';
@@ -185,6 +187,9 @@ export default function App() {
   const [sourcesPanelCollapsed, setSourcesPanelCollapsed] = useState(
     () => initialUi?.sourcesPanelCollapsed ?? true,
   );
+  const [dismissedUpcomingBannerKey, setDismissedUpcomingBannerKey] = useState(
+    () => initialUi?.dismissedUpcomingBannerKey ?? null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
@@ -221,8 +226,9 @@ export default function App() {
       multiSelect,
       collapsedGroups,
       sourcesPanelCollapsed,
+      dismissedUpcomingBannerKey,
     });
-  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesPanelCollapsed]);
+  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesPanelCollapsed, dismissedUpcomingBannerKey]);
 
   // Guards toggleFavorite against running before the initial GET resolves —
   // otherwise a click that races the load would save based on a stale
@@ -350,6 +356,13 @@ export default function App() {
     return sortFavorites(enriched, today);
   }, [favorites, events]);
   const sortedBlacklist = useMemo(() => sortBlacklist(blacklist), [blacklist]);
+  const upcomingFavoriteHighlight = useMemo(() => {
+    if (!favoritesLoaded) return null;
+    return getUpcomingFavoritesHighlight(favorites, events, todayIso());
+  }, [favorites, events, favoritesLoaded]);
+  const upcomingBannerVisible =
+    upcomingFavoriteHighlight &&
+    upcomingHighlightKey(upcomingFavoriteHighlight) !== dismissedUpcomingBannerKey;
 
   const toggleSource = (name) => {
     setSelectedSources((prev) => {
@@ -540,6 +553,50 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {upcomingBannerVisible && (
+        <div className="upcoming-favorites-banner" role="status" aria-live="polite">
+          <div className="upcoming-favorites-banner-header">
+            <span className="upcoming-favorites-banner-icon" aria-hidden>
+              ♥
+            </span>
+            <span className="upcoming-favorites-banner-label">
+              Next up · {formatDaysLeft(daysUntil(todayIso(), upcomingFavoriteHighlight.date))}
+              {' · '}
+              {formatDayName(upcomingFavoriteHighlight.date, 'short')}, {formatMonthDay(upcomingFavoriteHighlight.date)}
+            </span>
+            <button
+              type="button"
+              className="upcoming-favorites-banner-close"
+              aria-label="Dismiss upcoming favorites"
+              onClick={() =>
+                setDismissedUpcomingBannerKey(upcomingHighlightKey(upcomingFavoriteHighlight))
+              }
+            >
+              ✕
+            </button>
+          </div>
+          <ul className="upcoming-favorites-banner-list">
+            {upcomingFavoriteHighlight.events.map((f) => (
+              <li key={f.url} className="upcoming-favorites-banner-item">
+                <a
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="upcoming-favorites-banner-name"
+                >
+                  {f.name}
+                </a>
+                <span className="upcoming-favorites-banner-meta">
+                  {f.time}
+                  <span aria-hidden> · </span>
+                  {f.site}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {blacklistOpen && (
         <div className="blacklist-panel" role="dialog" aria-label="Hidden events">

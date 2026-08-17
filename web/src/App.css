@@ -9,6 +9,87 @@
   background: var(--bg);
 }
 
+.upcoming-favorites-banner {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid rgba(108, 140, 255, 0.35);
+  background: rgba(108, 140, 255, 0.12);
+}
+
+.upcoming-favorites-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+.upcoming-favorites-banner-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-hover);
+  letter-spacing: 0.01em;
+}
+
+.upcoming-favorites-banner-close {
+  flex-shrink: 0;
+  padding: 0.15rem 0.35rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.upcoming-favorites-banner-close:hover {
+  background: rgba(108, 140, 255, 0.18);
+  color: var(--text);
+}
+
+.upcoming-favorites-banner-icon {
+  color: var(--danger);
+  font-size: 0.85rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.upcoming-favorites-banner-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.upcoming-favorites-banner-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+}
+
+.upcoming-favorites-banner-name {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.upcoming-favorites-banner-name:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.upcoming-favorites-banner-meta {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .header-inner {
   max-width: none;
   margin: 0;
@@ -1060,6 +1141,14 @@
 
   .header-inner {
     padding: 0.35rem 0.75rem;
+  }
+
+  .upcoming-favorites-banner {
+    padding: 0.55rem 0.75rem;
+  }
+
+  .upcoming-favorites-banner-name {
+    font-size: 0.82rem;
   }
 
   .favorites-toggle-text {
