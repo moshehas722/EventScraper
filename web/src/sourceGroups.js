@@ -2,7 +2,7 @@ import { resolveSiteOrigin } from './siteOrigins.js';
 
 export const STORAGE_KEY = 'eventscraper-ui';
 
-/** @typedef {{ selectedSources: string[] | null, knownSources: string[] | null, multiSelect: boolean, collapsedGroups: Set<string>, sourcesPanelCollapsed: boolean, dismissedUpcomingBannerKey: string | null }} UiState */
+/** @typedef {{ selectedSources: string[] | null, knownSources: string[] | null, multiSelect: boolean, collapsedGroups: Set<string>, sourcesPanelCollapsed: boolean }} UiState */
 
 /** @returns {UiState | null} */
 export function loadUiState() {
@@ -19,8 +19,6 @@ export function loadUiState() {
       ),
       sourcesPanelCollapsed:
         typeof data.sourcesPanelCollapsed === 'boolean' ? data.sourcesPanelCollapsed : true,
-      dismissedUpcomingBannerKey:
-        typeof data.dismissedUpcomingBannerKey === 'string' ? data.dismissedUpcomingBannerKey : null,
     };
   } catch {
     return null;
@@ -28,7 +26,7 @@ export function loadUiState() {
 }
 
 /**
- * @param {{ selectedSources: Set<string>, knownSources: string[], multiSelect: boolean, collapsedGroups: Set<string>, sourcesPanelCollapsed: boolean, dismissedUpcomingBannerKey: string | null }} state
+ * @param {{ selectedSources: Set<string>, knownSources: string[], multiSelect: boolean, collapsedGroups: Set<string>, sourcesPanelCollapsed: boolean }} state
  */
 export function saveUiState({
   selectedSources,
@@ -36,7 +34,6 @@ export function saveUiState({
   multiSelect,
   collapsedGroups,
   sourcesPanelCollapsed,
-  dismissedUpcomingBannerKey,
 }) {
   try {
     localStorage.setItem(
@@ -47,7 +44,6 @@ export function saveUiState({
         multiSelect,
         collapsedGroups: [...collapsedGroups],
         sourcesPanelCollapsed,
-        dismissedUpcomingBannerKey,
       }),
     );
   } catch {

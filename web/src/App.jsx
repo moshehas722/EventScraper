@@ -188,7 +188,7 @@ export default function App() {
     () => initialUi?.sourcesPanelCollapsed ?? true,
   );
   const [dismissedUpcomingBannerKey, setDismissedUpcomingBannerKey] = useState(
-    () => initialUi?.dismissedUpcomingBannerKey ?? null,
+    /** @type {string | null} */ (null),
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -226,9 +226,8 @@ export default function App() {
       multiSelect,
       collapsedGroups,
       sourcesPanelCollapsed,
-      dismissedUpcomingBannerKey,
     });
-  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesPanelCollapsed, dismissedUpcomingBannerKey]);
+  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesPanelCollapsed]);
 
   // Guards toggleFavorite against running before the initial GET resolves —
   // otherwise a click that races the load would save based on a stale
