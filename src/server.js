@@ -8,7 +8,18 @@ import { scrapeEvents, todayIso, SITES } from './registry.js';
 import { downloadEventsFromBlob, downloadFavoritesFromBlob, uploadFavoritesToBlob } from './blob.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT) || 3001;
+const rootDir = path.join(__dirname, '..');
+
+for (const envFile of ['.env', '.env.local']) {
+  try {
+    process.loadEnvFile(path.join(rootDir, envFile));
+  } catch {
+    // file missing or unreadable
+  }
+}
+
+// Default 3101 — Windows often reserves 2939–3038 (3001 fails with EACCES).
+const PORT = Number(process.env.PORT) || 3101;
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
 
 const app = express();
@@ -107,6 +118,16 @@ app.get('*', (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`EventScraper API listening on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${PORT} is already in use. Stop the other process or set PORT in .env.`,
+    );
+    process.exit(1);
+  }
+  throw err;
 });

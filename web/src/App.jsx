@@ -55,20 +55,42 @@ function formatMonthDay(iso) {
   });
 }
 
-/** @typedef {'today' | 'tomorrow' | 'plus2' | 'plus3' | 'week' | 'all' | 'date'} DateFilterMode */
+function formatShortDateTime(d) {
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatCompactScope(mode, selectedDate) {
+  const dayIso = getFilterDayIso(mode, selectedDate);
+  if (dayIso) return `${formatDayName(dayIso, 'short')}, ${formatMonthDay(dayIso)}`;
+  if (mode === 'week') {
+    const today = todayIso();
+    return `${formatMonthDay(today)}–${formatMonthDay(addDays(today, 6))}`;
+  }
+  return null;
+}
+
+/** @typedef {'today' | 'tomorrow' | `plus${number}` | 'week' | 'date'} DateFilterMode */
+
+function dayOffsetFromMode(mode) {
+  if (mode === 'today') return 0;
+  if (mode === 'tomorrow') return 1;
+  const match = mode.match(/^plus(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
 
 function getFilterDayIso(mode, selectedDate) {
-  const today = todayIso();
-  if (mode === 'today') return today;
-  if (mode === 'tomorrow') return addDays(today, 1);
-  if (mode === 'plus2') return addDays(today, 2);
-  if (mode === 'plus3') return addDays(today, 3);
+  const offset = dayOffsetFromMode(mode);
+  if (offset !== null) return addDays(todayIso(), offset);
   if (mode === 'date') return selectedDate;
   return null;
 }
 
 function matchesDateFilter(eventDate, mode, selectedDate) {
-  if (mode === 'all') return true;
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return eventDate === dayIso;
   if (mode === 'week') {
@@ -79,7 +101,6 @@ function matchesDateFilter(eventDate, mode, selectedDate) {
 }
 
 function dateFilterLabel(mode, selectedDate) {
-  if (mode === 'all') return 'all dates';
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return formatDisplayDate(dayIso);
   const today = todayIso();
@@ -88,15 +109,35 @@ function dateFilterLabel(mode, selectedDate) {
 
 function buildDateFilters() {
   const today = todayIso();
-  return [
-    { id: 'today', label: 'Today' },
-    { id: 'tomorrow', label: 'Tomorrow' },
-    { id: 'plus2', label: formatDayName(addDays(today, 2)) },
-    { id: 'plus3', label: formatDayName(addDays(today, 3)) },
-    { id: 'week', label: 'This Week' },
-    { id: 'all', label: 'All' },
-    { id: 'date', label: 'Date' },
+  /** @type {Array<{ id: DateFilterMode, label: string, compactLabel: string, title: string }>} */
+  const filters = [
+    { id: 'today', label: 'Today', compactLabel: 'Now', title: formatDisplayDate(today) },
   ];
+
+  for (let offset = 1; offset <= 6; offset += 1) {
+    const iso = addDays(today, offset);
+    filters.push({
+      id: offset === 1 ? 'tomorrow' : /** @type {DateFilterMode} */ (`plus${offset}`),
+      label: formatDayName(iso, 'short'),
+      compactLabel: formatDayName(iso, 'short').slice(0, 2),
+      title: formatDisplayDate(iso),
+    });
+  }
+
+  filters.push({
+    id: 'week',
+    label: 'Week',
+    compactLabel: 'Wk',
+    title: `${formatDisplayDate(today)} – ${formatDisplayDate(addDays(today, 6))}`,
+  });
+  filters.push({
+    id: 'date',
+    label: 'Date',
+    compactLabel: 'Cal',
+    title: 'Pick a specific date',
+  });
+
+  return filters;
 }
 
 function GroupCheckbox({ checked, indeterminate, onChange, label }) {
@@ -121,7 +162,9 @@ function GroupCheckbox({ checked, indeterminate, onChange, label }) {
 
 // Live scraping talks to the local Express API (proxied by Vite in dev) —
 // there's no such backend on the deployed (Vercel) build, only Blob storage.
-const liveScrapeEnabled = import.meta.env.DEV;
+// Set VITE_DISABLE_BLOB=true in .env to skip Blob auto-load and show the button.
+const disableBlob = import.meta.env.VITE_DISABLE_BLOB === 'true';
+const liveScrapeEnabled = import.meta.env.DEV || disableBlob;
 
 export default function App() {
   const initialUi = useMemo(() => loadUiState(), []);
@@ -133,6 +176,9 @@ export default function App() {
   const [multiSelect, setMultiSelect] = useState(() => initialUi?.multiSelect ?? true);
   const [collapsedGroups, setCollapsedGroups] = useState(
     () => initialUi?.collapsedGroups ?? new Set(),
+  );
+  const [sourcesPanelCollapsed, setSourcesPanelCollapsed] = useState(
+    () => initialUi?.sourcesPanelCollapsed ?? true,
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -161,8 +207,14 @@ export default function App() {
   useEffect(() => {
     if (!hydratedRef.current) return;
     const knownSources = [...new Set(events.map((e) => e.site))];
-    saveUiState({ selectedSources, knownSources, multiSelect, collapsedGroups });
-  }, [events, selectedSources, multiSelect, collapsedGroups]);
+    saveUiState({
+      selectedSources,
+      knownSources,
+      multiSelect,
+      collapsedGroups,
+      sourcesPanelCollapsed,
+    });
+  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesPanelCollapsed]);
 
   // Guards toggleFavorite against running before the initial GET resolves —
   // otherwise a click that races the load would save based on a stale
@@ -291,7 +343,7 @@ export default function App() {
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
   const filteredEvents = dateEvents.filter((e) => selectedSources.has(e.site));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
-  const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
+  const showDateColumn = dateFilter === 'week';
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
 
@@ -336,11 +388,12 @@ export default function App() {
   );
 
   useEffect(() => {
-    loadFromBlob();
+    if (!disableBlob) loadFromBlob();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const scopeLabel = dateFilterLabel(dateFilter, date);
+  const scopeCompact = formatCompactScope(dateFilter, date);
   const filterActive = sourceFilterActive;
   const displayCount = filteredEvents.length;
   const scopeCount = dateEvents.length;
@@ -393,12 +446,15 @@ export default function App() {
             className="favorites-toggle"
             aria-pressed={favoritesOpen}
             aria-expanded={favoritesOpen}
+            aria-label={
+              favorites.length > 0 ? `Favorites (${favorites.length})` : 'Favorites'
+            }
             onClick={() => setFavoritesOpen((v) => !v)}
           >
             <span className="favorites-toggle-icon" aria-hidden>
               ♥
             </span>
-            Favorites
+            <span className="favorites-toggle-text">Favorites</span>
             {favorites.length > 0 && (
               <span className="favorites-count">{favorites.length}</span>
             )}
@@ -466,10 +522,29 @@ export default function App() {
 
       <div className="app-body">
         {lastFetched && sources.length > 0 && (
-          <aside className="sources-sidebar card">
-            <div className="source-filter-header">
-              <span className="field-label">Sources</span>
-            </div>
+          <aside
+            className={`sources-sidebar card${sourcesPanelCollapsed ? ' sources-sidebar--collapsed' : ''}`}
+          >
+            <button
+              type="button"
+              className="sources-sidebar-toggle"
+              aria-expanded={!sourcesPanelCollapsed}
+              aria-controls="sources-panel-body"
+              aria-label={`Sources, ${selectedSources.size} of ${sources.length} selected`}
+              onClick={() => setSourcesPanelCollapsed((v) => !v)}
+            >
+              <span className="sources-sidebar-label">Sources</span>
+              <span className="sources-sidebar-summary">
+                {selectedSources.size}/{sources.length}
+              </span>
+              <span
+                className={`source-group-chevron${sourcesPanelCollapsed ? ' source-group-chevron--collapsed' : ''}`}
+                aria-hidden
+              >
+                ▾
+              </span>
+            </button>
+            <div id="sources-panel-body" className="sources-sidebar-body">
             <div className="source-options">
               <div className="source-bulk-actions">
                 <button type="button" className="link-btn" onClick={selectAllSources}>
@@ -566,6 +641,7 @@ export default function App() {
                 );
               })}
             </ul>
+            </div>
           </aside>
         )}
 
@@ -573,17 +649,22 @@ export default function App() {
         <section className="controls card">
           <div className="controls-row">
             <div className="date-filter">
-              <span className="field-label">When</span>
-              <div className="filter-segment" role="group" aria-label="Filter by date">
-                {dateFilters.map(({ id, label }) => (
+              <span className="field-label field-label--inline">When</span>
+              <div className="filter-segment filter-segment--compact" role="group" aria-label="Filter by date">
+                {dateFilters.map(({ id, label, compactLabel, title }) => (
                   <button
                     key={id}
                     type="button"
-                    className={`filter-segment-btn${dateFilter === id ? ' filter-segment-btn--selected' : ''}`}
+                    className={`filter-segment-btn filter-segment-btn--compact${dateFilter === id ? ' filter-segment-btn--selected' : ''}${id === 'today' ? ' filter-segment-btn--today' : ''}`}
                     aria-pressed={dateFilter === id}
-                    onClick={() => setDateFilter(/** @type {DateFilterMode} */ (id))}
+                    aria-label={title}
+                    title={title}
+                    onClick={() => setDateFilter(id)}
                   >
-                    {label}
+                    <span className="filter-segment-btn-label">{label}</span>
+                    <span className="filter-segment-btn-label filter-segment-btn-label--short" aria-hidden>
+                      {compactLabel}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -627,19 +708,15 @@ export default function App() {
 
           {lastFetched && !loading && (
             <p className="meta">
-              {source === 'blob'
-                ? `Loaded saved snapshot${snapshotUploadedAt ? ` from ${snapshotUploadedAt.toLocaleString()}` : ''}`
-                : `Last updated ${lastFetched.toLocaleTimeString()}`}
-              {' — '}
-              {filterActive ? `${displayCount} of ${scopeCount}` : displayCount}{' '}
-              event{displayCount === 1 ? '' : 's'} for {scopeLabel}
-              {filterActive && ' (filtered by source)'}
-              {events.length > 0 && (
-                <span className="meta-total"> · {events.length} total upcoming</span>
-              )}
+              <time dateTime={(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched).toISOString()}>
+                {formatShortDateTime(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched)}
+              </time>
+              {' · '}
+              {filterActive ? `${displayCount}/${scopeCount}` : displayCount} events
+              {scopeCompact && <> · {scopeCompact}</>}
             </p>
           )}
-          {loading && !lastFetched && (
+          {loading && !lastFetched && !disableBlob && (
             <p className="meta">Loading the latest snapshot…</p>
           )}
         </section>
@@ -653,7 +730,11 @@ export default function App() {
         <section className="results card">
           {!lastFetched && !loading && !error && (
             <div className="empty-state">
-              <p>No events loaded yet.</p>
+              <p>
+                {disableBlob
+                  ? 'No events loaded yet. Click Fetch events to scrape from venues.'
+                  : 'No events loaded yet.'}
+              </p>
             </div>
           )}
 
