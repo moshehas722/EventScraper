@@ -13,6 +13,11 @@ import {
   sortFavorites,
   toFavoriteRecord,
 } from './favorites.js';
+import {
+  eventKey,
+  sortBlacklist,
+  toBlacklistRecord,
+} from './blacklist.js';
 import './App.css';
 
 function todayIso() {
@@ -189,6 +194,9 @@ export default function App() {
   const [favorites, setFavorites] = useState(/** @type {Array} */ ([]));
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [favoritesError, setFavoritesError] = useState(null);
+  const [blacklist, setBlacklist] = useState(/** @type {Array} */ ([]));
+  const [blacklistOpen, setBlacklistOpen] = useState(false);
+  const [blacklistError, setBlacklistError] = useState(null);
   // Guards against the initial (still-empty) render's state overwriting the
   // saved selection in localStorage before the auto-load-on-mount fetch resolves.
   const hydratedRef = useRef(false);
@@ -229,6 +237,9 @@ export default function App() {
   // could overwrite it back to the pre-click state. Only the first
   // invocation's fetch is allowed to actually run.
   const favoritesLoadStartedRef = useRef(false);
+  const [blacklistLoaded, setBlacklistLoaded] = useState(false);
+  const blacklistPersistRequestIdRef = useRef(0);
+  const blacklistLoadStartedRef = useRef(false);
 
   useEffect(() => {
     if (favoritesLoadStartedRef.current) return;
@@ -238,6 +249,16 @@ export default function App() {
       .then((data) => setFavorites(Array.isArray(data.favorites) ? data.favorites : []))
       .catch(() => {})
       .finally(() => setFavoritesLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    if (blacklistLoadStartedRef.current) return;
+    blacklistLoadStartedRef.current = true;
+    fetch('/api/blacklist')
+      .then((res) => (res.ok ? res.json() : { blacklist: [] }))
+      .then((data) => setBlacklist(Array.isArray(data.blacklist) ? data.blacklist : []))
+      .catch(() => {})
+      .finally(() => setBlacklistLoaded(true));
   }, []);
 
   const persistFavorites = useCallback(async (next) => {
@@ -278,6 +299,40 @@ export default function App() {
     [favorites, favoritesLoaded, persistFavorites],
   );
 
+  const persistBlacklist = useCallback(async (next) => {
+    const requestId = ++blacklistPersistRequestIdRef.current;
+    try {
+      setBlacklistError(null);
+      const res = await fetch('/api/blacklist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blacklist: next }),
+        keepalive: true,
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      if (requestId === blacklistPersistRequestIdRef.current && Array.isArray(data.blacklist)) {
+        setBlacklist(data.blacklist);
+      }
+    } catch {
+      setBlacklistError('Failed to save hidden events — try again.');
+    }
+  }, []);
+
+  const toggleBlacklist = useCallback(
+    (event) => {
+      if (!blacklistLoaded) return;
+      const key = eventKey(event);
+      const exists = blacklist.some((entry) => eventKey(entry) === key);
+      const next = exists
+        ? blacklist.filter((entry) => eventKey(entry) !== key)
+        : [...blacklist, toBlacklistRecord(event)];
+      setBlacklist(next);
+      persistBlacklist(next);
+    },
+    [blacklist, blacklistLoaded, persistBlacklist],
+  );
+
   const sources = [...new Set(events.map((e) => e.site))].sort((a, b) => a.localeCompare(b));
   const sourceGroups = useMemo(
     () => buildSourceGroups(sources, siteMeta),
@@ -285,6 +340,7 @@ export default function App() {
   );
 
   const favoriteUrls = useMemo(() => new Set(favorites.map((f) => f.url)), [favorites]);
+  const blacklistKeys = useMemo(() => new Set(blacklist.map((entry) => eventKey(entry))), [blacklist]);
   const sortedFavorites = useMemo(() => {
     const today = todayIso();
     const enriched = favorites.map((f) => {
@@ -293,6 +349,7 @@ export default function App() {
     });
     return sortFavorites(enriched, today);
   }, [favorites, events]);
+  const sortedBlacklist = useMemo(() => sortBlacklist(blacklist), [blacklist]);
 
   const toggleSource = (name) => {
     setSelectedSources((prev) => {
@@ -341,8 +398,10 @@ export default function App() {
   };
 
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
-  const filteredEvents = dateEvents.filter((e) => selectedSources.has(e.site));
+  const sourceFilteredEvents = dateEvents.filter((e) => selectedSources.has(e.site));
+  const filteredEvents = sourceFilteredEvents.filter((e) => !blacklistKeys.has(eventKey(e)));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
+  const blacklistActive = sourceFilteredEvents.length > filteredEvents.length;
   const showDateColumn = dateFilter === 'week';
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
@@ -394,7 +453,7 @@ export default function App() {
 
   const scopeLabel = dateFilterLabel(dateFilter, date);
   const scopeCompact = formatCompactScope(dateFilter, date);
-  const filterActive = sourceFilterActive;
+  const filterActive = sourceFilterActive || blacklistActive;
   const displayCount = filteredEvents.length;
   const scopeCount = dateEvents.length;
 
@@ -441,26 +500,88 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <h1>What's Happening...</h1>
-          <button
-            type="button"
-            className="favorites-toggle"
-            aria-pressed={favoritesOpen}
-            aria-expanded={favoritesOpen}
-            aria-label={
-              favorites.length > 0 ? `Favorites (${favorites.length})` : 'Favorites'
-            }
-            onClick={() => setFavoritesOpen((v) => !v)}
-          >
-            <span className="favorites-toggle-icon" aria-hidden>
-              ♥
-            </span>
-            <span className="favorites-toggle-text">Favorites</span>
-            {favorites.length > 0 && (
-              <span className="favorites-count">{favorites.length}</span>
-            )}
-          </button>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="blacklist-toggle"
+              aria-pressed={blacklistOpen}
+              aria-expanded={blacklistOpen}
+              aria-label={
+                blacklist.length > 0 ? `Hidden events (${blacklist.length})` : 'Hidden events'
+              }
+              onClick={() => setBlacklistOpen((v) => !v)}
+            >
+              <span className="blacklist-toggle-icon" aria-hidden>
+                ✕
+              </span>
+              <span className="blacklist-toggle-text">Hidden</span>
+              {blacklist.length > 0 && (
+                <span className="blacklist-count">{blacklist.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="favorites-toggle"
+              aria-pressed={favoritesOpen}
+              aria-expanded={favoritesOpen}
+              aria-label={
+                favorites.length > 0 ? `Favorites (${favorites.length})` : 'Favorites'
+              }
+              onClick={() => setFavoritesOpen((v) => !v)}
+            >
+              <span className="favorites-toggle-icon" aria-hidden>
+                ♥
+              </span>
+              <span className="favorites-toggle-text">Favorites</span>
+              {favorites.length > 0 && (
+                <span className="favorites-count">{favorites.length}</span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
+
+      {blacklistOpen && (
+        <div className="blacklist-panel" role="dialog" aria-label="Hidden events">
+          <div className="blacklist-panel-header">
+            <h2>Hidden events</h2>
+            <button
+              type="button"
+              className="blacklist-panel-close"
+              aria-label="Close hidden events"
+              onClick={() => setBlacklistOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+
+          {blacklistError && <p className="blacklist-panel-error">{blacklistError}</p>}
+
+          {sortedBlacklist.length === 0 ? (
+            <p className="blacklist-panel-empty">
+              No hidden events — tap ✕ on any event to hide it from the list.
+            </p>
+          ) : (
+            <ul className="blacklist-list">
+              {sortedBlacklist.map((entry) => (
+                <li key={eventKey(entry)} className="blacklist-item">
+                  <button
+                    type="button"
+                    className="hide-btn hide-btn--active"
+                    aria-label={`Show ${entry.name} again`}
+                    onClick={() => toggleBlacklist(entry)}
+                  >
+                    ↩
+                  </button>
+                  <div className="blacklist-item-body">
+                    <span className="blacklist-item-name">{entry.name}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {favoritesOpen && (
         <div className="favorites-panel" role="dialog" aria-label="Favorites">
@@ -752,7 +873,11 @@ export default function App() {
 
           {lastFetched && dateEvents.length > 0 && filteredEvents.length === 0 && !loading && (
             <div className="empty-state">
-              <p>No events match the selected sources.</p>
+              <p>
+                {sourceFilteredEvents.length === 0
+                  ? 'No events match the selected sources.'
+                  : 'All matching events are hidden.'}
+              </p>
             </div>
           )}
 
@@ -800,23 +925,34 @@ export default function App() {
                         <span>{e.site}</span>
                       </td>
                       <td className="name-cell">
-                        <button
-                          type="button"
-                          className={`favorite-btn${favoriteUrls.has(e.url) ? ' favorite-btn--active' : ''}`}
-                          aria-pressed={favoriteUrls.has(e.url)}
-                          disabled={!favoritesLoaded}
-                          aria-label={
-                            favoriteUrls.has(e.url)
-                              ? `Remove ${e.name} from favorites`
-                              : `Add ${e.name} to favorites`
-                          }
-                          onClick={() => toggleFavorite(e)}
-                        >
-                          {favoriteUrls.has(e.url) ? '♥' : '♡'}
-                        </button>
-                        <a href={e.url} target="_blank" rel="noopener noreferrer">
-                          {e.name}
-                        </a>
+                        <div className="event-row-actions">
+                          <button
+                            type="button"
+                            className={`favorite-btn${favoriteUrls.has(e.url) ? ' favorite-btn--active' : ''}`}
+                            aria-pressed={favoriteUrls.has(e.url)}
+                            disabled={!favoritesLoaded}
+                            aria-label={
+                              favoriteUrls.has(e.url)
+                                ? `Remove ${e.name} from favorites`
+                                : `Add ${e.name} to favorites`
+                            }
+                            onClick={() => toggleFavorite(e)}
+                          >
+                            {favoriteUrls.has(e.url) ? '♥' : '♡'}
+                          </button>
+                          <button
+                            type="button"
+                            className="hide-btn"
+                            disabled={!blacklistLoaded}
+                            aria-label={`Hide ${e.name}`}
+                            onClick={() => toggleBlacklist(e)}
+                          >
+                            ✕
+                          </button>
+                          <a href={e.url} target="_blank" rel="noopener noreferrer">
+                            {e.name}
+                          </a>
+                        </div>
                       </td>
                     </tr>
                     );

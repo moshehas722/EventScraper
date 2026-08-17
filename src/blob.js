@@ -94,3 +94,34 @@ export async function uploadFavoritesToBlob(favorites) {
     token,
   });
 }
+
+const BLACKLIST_PATHNAME = 'blacklist/blacklist.json';
+
+/**
+ * Load the saved event blacklist from Vercel Blob.
+ * @returns {Promise<Array>} empty array if nothing has been saved yet
+ */
+export async function downloadBlacklistFromBlob() {
+  const token = requireToken();
+  const result = await get(BLACKLIST_PATHNAME, { access: 'private', token, useCache: false });
+  if (!result) return [];
+
+  const text = await new Response(result.stream).text();
+  const parsed = JSON.parse(text);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/**
+ * Overwrite the saved event blacklist in Vercel Blob.
+ * @param {Array} blacklist
+ */
+export async function uploadBlacklistToBlob(blacklist) {
+  const token = requireToken();
+  return put(BLACKLIST_PATHNAME, JSON.stringify(blacklist, null, 2), {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
+    token,
+  });
+}

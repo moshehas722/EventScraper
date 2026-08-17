@@ -5,7 +5,7 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scrapeEvents, todayIso, SITES } from './registry.js';
-import { downloadEventsFromBlob, downloadFavoritesFromBlob, uploadFavoritesToBlob } from './blob.js';
+import { downloadEventsFromBlob, downloadFavoritesFromBlob, uploadFavoritesToBlob, downloadBlacklistFromBlob, uploadBlacklistToBlob } from './blob.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
@@ -106,6 +106,31 @@ app.put('/api/favorites', async (req, res) => {
   } catch (err) {
     console.error('Favorites save failed:', err);
     res.status(500).json({ error: err.message ?? 'Favorites save failed' });
+  }
+});
+
+app.get('/api/blacklist', async (_req, res) => {
+  try {
+    const blacklist = await downloadBlacklistFromBlob();
+    res.json({ blacklist });
+  } catch (err) {
+    console.error('Blacklist load failed:', err);
+    res.status(500).json({ error: err.message ?? 'Blacklist load failed' });
+  }
+});
+
+app.put('/api/blacklist', async (req, res) => {
+  const { blacklist } = req.body ?? {};
+  if (!Array.isArray(blacklist)) {
+    return res.status(400).json({ error: 'Body must be { blacklist: [...] }' });
+  }
+
+  try {
+    await uploadBlacklistToBlob(blacklist);
+    res.json({ blacklist });
+  } catch (err) {
+    console.error('Blacklist save failed:', err);
+    res.status(500).json({ error: err.message ?? 'Blacklist save failed' });
   }
 });
 
