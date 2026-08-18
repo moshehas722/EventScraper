@@ -17,6 +17,8 @@ import {
 } from './favorites.js';
 import {
   eventKey,
+  isBlacklisted,
+  blacklistEntryMatches,
   sortBlacklist,
   toBlacklistRecord,
 } from './blacklist.js';
@@ -223,7 +225,7 @@ export default function App() {
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    const knownSources = [...new Set(events.map((e) => e.site))];
+    const knownSources = [...new Set(events.map((e) => e.source))];
     saveUiState({
       selectedSources,
       knownSources,
@@ -298,9 +300,9 @@ export default function App() {
   const toggleFavorite = useCallback(
     (event) => {
       if (!favoritesLoaded) return;
-      const exists = favorites.some((f) => f.url === event.url);
+      const exists = favorites.some((f) => f.id === event.id);
       const next = exists
-        ? favorites.filter((f) => f.url !== event.url)
+        ? favorites.filter((f) => f.id !== event.id)
         : [...favorites, toFavoriteRecord(event)];
       setFavorites(next);
       persistFavorites(next);
@@ -331,10 +333,9 @@ export default function App() {
   const toggleBlacklist = useCallback(
     (event) => {
       if (!blacklistLoaded) return;
-      const key = eventKey(event);
-      const exists = blacklist.some((entry) => eventKey(entry) === key);
+      const exists = isBlacklisted(event, blacklist);
       const next = exists
-        ? blacklist.filter((entry) => eventKey(entry) !== key)
+        ? blacklist.filter((entry) => !blacklistEntryMatches(entry, event))
         : [...blacklist, toBlacklistRecord(event)];
       setBlacklist(next);
       persistBlacklist(next);
@@ -373,14 +374,19 @@ export default function App() {
     [whatsappMessages],
   );
 
-  const sources = [...new Set(events.map((e) => e.site))].sort((a, b) => a.localeCompare(b));
+  const sources = [...new Set(events.map((e) => e.source))].sort((a, b) => a.localeCompare(b));
   const sourceGroups = useMemo(
     () => buildSourceGroups(sources, siteMeta),
     [sources, siteMeta],
   );
+  // WhatsApp-origin sources have no favicon-able origin — shown with a badge
+  // instead, wherever a favicon would otherwise be missing.
+  const whatsappSources = useMemo(
+    () => new Set(events.filter((e) => e.origin === 'whatsapp').map((e) => e.source)),
+    [events],
+  );
 
-  const favoriteUrls = useMemo(() => new Set(favorites.map((f) => f.url)), [favorites]);
-  const blacklistKeys = useMemo(() => new Set(blacklist.map((entry) => eventKey(entry))), [blacklist]);
+  const favoriteIds = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
   const sortedFavorites = useMemo(() => {
     const today = todayIso();
     const enriched = favorites.map((f) => {
@@ -445,8 +451,8 @@ export default function App() {
   };
 
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
-  const sourceFilteredEvents = dateEvents.filter((e) => selectedSources.has(e.site));
-  const filteredEvents = sourceFilteredEvents.filter((e) => !blacklistKeys.has(eventKey(e)));
+  const sourceFilteredEvents = dateEvents.filter((e) => selectedSources.has(e.source));
+  const filteredEvents = sourceFilteredEvents.filter((e) => !isBlacklisted(e, blacklist));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
   const blacklistActive = sourceFilteredEvents.length > filteredEvents.length;
   const showDateColumn = dateFilter === 'week';
@@ -463,7 +469,7 @@ export default function App() {
         throw new Error(body.error ?? `Request failed (${res.status})`);
       }
       const data = await res.json();
-      const fetchedSources = [...new Set(data.events.map((e) => e.site))];
+      const fetchedSources = [...new Set(data.events.map((e) => e.source))];
       const stored = loadUiState();
       setEvents(data.events);
       setSelectedSources(
@@ -534,6 +540,9 @@ export default function App() {
                 height={16}
                 loading="lazy"
               />
+            )}
+            {!nested && !siteIcon && whatsappSources.has(name) && (
+              <span className="site-icon-badge" aria-hidden>💬</span>
             )}
             <span className="source-item-name">{name}</span>
           </button>
@@ -631,23 +640,34 @@ export default function App() {
             </button>
           </div>
           <ul className="upcoming-favorites-banner-list">
-            {upcomingFavoriteHighlight.events.map((f) => (
-              <li key={f.url} className="upcoming-favorites-banner-item">
-                <a
-                  href={f.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="upcoming-favorites-banner-name"
-                >
-                  {f.name}
-                </a>
-                <span className="upcoming-favorites-banner-meta">
-                  {f.time}
-                  <span aria-hidden> · </span>
-                  {f.site}
-                </span>
-              </li>
-            ))}
+            {upcomingFavoriteHighlight.events.map((f) =>
+              f.referenceType === 'url' ? (
+                <li key={f.id} className="upcoming-favorites-banner-item">
+                  <a
+                    href={f.reference}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="upcoming-favorites-banner-name"
+                  >
+                    {f.name || 'Untitled event'}
+                  </a>
+                  <span className="upcoming-favorites-banner-meta">
+                    {f.time}
+                    <span aria-hidden> · </span>
+                    {f.source}
+                  </span>
+                </li>
+              ) : (
+                <li key={f.id} className="upcoming-favorites-banner-item">
+                  <span className="upcoming-favorites-banner-name">{f.name || 'Untitled event'}</span>
+                  <span className="upcoming-favorites-banner-meta">
+                    {f.time}
+                    <span aria-hidden> · </span>
+                    {f.source}
+                  </span>
+                </li>
+              ),
+            )}
           </ul>
         </div>
       )}
@@ -762,24 +782,28 @@ export default function App() {
           ) : (
             <ul className="favorites-list">
               {sortedFavorites.map((f) => (
-                <li key={f.url} className="favorites-item">
+                <li key={f.id} className="favorites-item">
                   <button
                     type="button"
                     className="favorite-btn favorite-btn--active"
-                    aria-label={`Remove ${f.name} from favorites`}
+                    aria-label={`Remove ${f.name || 'this event'} from favorites`}
                     onClick={() => toggleFavorite(f)}
                   >
                     ♥
                   </button>
                   <div className="favorites-item-body">
-                    <a
-                      href={f.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="favorites-item-name"
-                    >
-                      {f.name}
-                    </a>
+                    {f.referenceType === 'url' ? (
+                      <a
+                        href={f.reference}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="favorites-item-name"
+                      >
+                        {f.name || 'Untitled event'}
+                      </a>
+                    ) : (
+                      <span className="favorites-item-name">{f.name || 'Untitled event'}</span>
+                    )}
                     <div className="favorites-item-meta">
                       <span className="favorites-item-days">{formatDaysLeft(f.daysUntil)}</span>
                       <span aria-hidden>·</span>
@@ -787,7 +811,7 @@ export default function App() {
                         {formatMonthDay(f.date)} {f.time}
                       </span>
                       <span aria-hidden>·</span>
-                      <span>{f.site}</span>
+                      <span>{f.source}</span>
                     </div>
                   </div>
                 </li>
@@ -1048,17 +1072,19 @@ export default function App() {
                     {showDateColumn && <th>Day</th>}
                     <th>Time</th>
                     <th>Price</th>
-                    <th>Venue</th>
+                    <th>Source</th>
                     <th>Event</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredEvents.map((e, i) => {
                     const siteIcon = faviconUrl(
-                      e.siteOrigin ?? resolveSiteOrigin(e.site, siteMeta),
+                      e.sourceOrigin ?? resolveSiteOrigin(e.source, siteMeta),
                     );
+                    const isFavorite = favoriteIds.has(e.id);
+                    const displayName = e.name || 'Untitled event';
                     return (
-                    <tr key={`${e.url}-${i}`}>
+                    <tr key={`${e.id}-${i}`}>
                       {showDateColumn && (
                         <td className="date-cell">
                           <span className="day-name">{formatDayName(e.date, 'short')}</span>
@@ -1066,7 +1092,7 @@ export default function App() {
                         </td>
                       )}
                       <td className="time-cell">{e.time}</td>
-                      <td className="price-cell">{e.priceText}</td>
+                      <td className="price-cell">{e.cost}</td>
                       <td className="site-cell">
                         {siteIcon && (
                           <img
@@ -1078,36 +1104,43 @@ export default function App() {
                             loading="lazy"
                           />
                         )}
-                        <span>{e.site}</span>
+                        {!siteIcon && e.origin === 'whatsapp' && (
+                          <span className="site-icon-badge" aria-hidden>💬</span>
+                        )}
+                        <span>{e.source}</span>
                       </td>
                       <td className="name-cell">
                         <div className="event-row-actions">
                           <button
                             type="button"
-                            className={`favorite-btn${favoriteUrls.has(e.url) ? ' favorite-btn--active' : ''}`}
-                            aria-pressed={favoriteUrls.has(e.url)}
+                            className={`favorite-btn${isFavorite ? ' favorite-btn--active' : ''}`}
+                            aria-pressed={isFavorite}
                             disabled={!favoritesLoaded}
                             aria-label={
-                              favoriteUrls.has(e.url)
-                                ? `Remove ${e.name} from favorites`
-                                : `Add ${e.name} to favorites`
+                              isFavorite
+                                ? `Remove ${displayName} from favorites`
+                                : `Add ${displayName} to favorites`
                             }
                             onClick={() => toggleFavorite(e)}
                           >
-                            {favoriteUrls.has(e.url) ? '♥' : '♡'}
+                            {isFavorite ? '♥' : '♡'}
                           </button>
                           <button
                             type="button"
                             className="hide-btn"
                             disabled={!blacklistLoaded}
-                            aria-label={`Hide ${e.name}`}
+                            aria-label={`Hide ${displayName}`}
                             onClick={() => toggleBlacklist(e)}
                           >
                             ✕
                           </button>
-                          <a href={e.url} target="_blank" rel="noopener noreferrer">
-                            {e.name}
-                          </a>
+                          {e.referenceType === 'url' ? (
+                            <a href={e.reference} target="_blank" rel="noopener noreferrer">
+                              {displayName}
+                            </a>
+                          ) : (
+                            <span>{displayName}</span>
+                          )}
                         </div>
                       </td>
                     </tr>

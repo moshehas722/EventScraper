@@ -26,7 +26,30 @@ export default async function handler(req, res) {
     }
 
     const text = await new Response(result.stream).text();
-    const events = JSON.parse(text);
+    const siteEvents = JSON.parse(text);
+
+    // WhatsApp events aren't pruned by date-relevance (only by retention), so
+    // they need an explicit "still upcoming" filter here — the site snapshot
+    // is already upcoming-only by construction. Never let this fail the
+    // whole request — fall back to site events only.
+    let waEvents = [];
+    try {
+      const waResult = await get('whatsapp/events.json', { access: 'private', useCache: false });
+      if (waResult) {
+        const waText = await new Response(waResult.stream).text();
+        const parsed = JSON.parse(waText);
+        waEvents = Array.isArray(parsed) ? parsed : [];
+      }
+      const today = todayIso();
+      waEvents = waEvents.filter((e) => e.date >= today);
+      if (!all) waEvents = waEvents.filter((e) => e.date === date);
+    } catch (err) {
+      console.error('WhatsApp events load failed (continuing with site events only):', err);
+    }
+
+    const events = [...siteEvents, ...waEvents].sort(
+      (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time),
+    );
 
     res.status(200).json({
       date: all ? null : date,

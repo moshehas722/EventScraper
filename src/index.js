@@ -69,8 +69,8 @@ function printTable(events, opts) {
     return;
   }
   const whenW = opts.all ? 17 : 6;
-  const priceW = Math.max(5, ...events.map((e) => e.priceText.length));
-  const siteW = Math.max(6, ...events.map((e) => e.site.length));
+  const priceW = Math.max(5, ...events.map((e) => e.cost.length));
+  const siteW = Math.max(6, ...events.map((e) => e.source.length));
   const whenLabel = opts.all ? 'Date/Time' : 'Time';
 
   console.log(
@@ -80,9 +80,9 @@ function printTable(events, opts) {
   for (const e of events) {
     const when = opts.all ? `${e.date} ${e.time}` : e.time;
     console.log(
-      `  ${when.padEnd(whenW)}  ${e.priceText.padEnd(priceW)}  ${e.site.padEnd(siteW)}  ${e.name}`,
+      `  ${when.padEnd(whenW)}  ${e.cost.padEnd(priceW)}  ${e.source.padEnd(siteW)}  ${e.name}`,
     );
-    console.log(`  ${' '.repeat(whenW)}  ${' '.repeat(priceW)}  ${' '.repeat(siteW)}  ${e.url}`);
+    console.log(`  ${' '.repeat(whenW)}  ${' '.repeat(priceW)}  ${' '.repeat(siteW)}  ${e.reference}`);
   }
   console.log('');
 }

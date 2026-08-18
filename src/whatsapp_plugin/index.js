@@ -12,10 +12,12 @@
 import {
   downloadWhatsAppMessages,
   saveWhatsAppMessages,
+  saveWhatsAppEvents,
   loadWhatsAppPluginSecret,
   saveWhatsAppPluginSecret,
 } from './blob.js';
 import { extractEventFromMessage } from './llm.js';
+import { toPortalEventFromWhatsAppEntry } from '../portalEvent.js';
 
 // Node doesn't auto-load .env files; server.js's own loader runs before this
 // module's exported mountWhatsAppPlugin() is called, but not before this
@@ -71,6 +73,17 @@ async function storeAndPrune(entry, retentionDays) {
     const cutoff = Date.now() - retentionDays * DAY_MS;
     const kept = messages.filter((m) => m.receivedAt >= cutoff);
     await saveWhatsAppMessages(kept);
+
+    // Best-effort: the raw message is already safely stored above, so a
+    // failure deriving/saving the portal-facing events view must never
+    // surface as a failure to store the message itself.
+    try {
+      const portalEvents = kept.map(toPortalEventFromWhatsAppEntry).filter(Boolean);
+      await saveWhatsAppEvents(portalEvents);
+    } catch (err) {
+      console.error('[whatsapp-plugin] failed to derive/save portal events (raw message still stored):', err.message);
+    }
+
     return kept.length;
   });
 }

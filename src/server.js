@@ -12,8 +12,26 @@ import {
   downloadBlacklistFromBlob,
   uploadBlacklistToBlob,
 } from './blob.js';
-import { downloadWhatsAppMessages } from './whatsapp_plugin/blob.js';
+import { downloadWhatsAppMessages, downloadWhatsAppEvents } from './whatsapp_plugin/blob.js';
 import { mountWhatsAppPlugin } from './whatsapp_plugin/index.js';
+import { computeEventId } from './portalEvent.js';
+
+// Upgrades a pre-Portal-Event favorite record ({url,name,date,time,priceText,
+// site,siteOrigin}) to the current shape. Every pre-migration favorite is
+// necessarily a site event, so referenceType: 'url' is always safe here.
+function migrateLegacyFavorite(f) {
+  return {
+    id: computeEventId({ source: f.site, reference: f.url, date: f.date, time: f.time }),
+    name: f.name,
+    date: f.date,
+    time: f.time,
+    cost: f.priceText,
+    source: f.site,
+    sourceOrigin: f.siteOrigin ?? null,
+    reference: f.url,
+    referenceType: 'url',
+  };
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
@@ -75,11 +93,28 @@ app.get('/api/events/blob', async (req, res) => {
     if (!snapshot) {
       return res.status(404).json({ error: 'No saved snapshot found in Blob storage' });
     }
+
+    // WhatsApp events aren't pruned by date-relevance (only by retention), so
+    // they need an explicit "still upcoming" filter here — the site snapshot
+    // is already upcoming-only by construction.
+    let waEvents = [];
+    try {
+      const today = todayIso();
+      waEvents = (await downloadWhatsAppEvents()).filter((e) => e.date >= today);
+      if (!all) waEvents = waEvents.filter((e) => e.date === date);
+    } catch (err) {
+      console.error('WhatsApp events load failed (continuing with site events only):', err);
+    }
+
+    const events = [...snapshot.events, ...waEvents].sort(
+      (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time),
+    );
+
     res.json({
       date: all ? null : date,
       all,
-      count: snapshot.events.length,
-      events: snapshot.events,
+      count: events.length,
+      events,
       uploadedAt: snapshot.uploadedAt,
       source: 'blob',
     });
@@ -92,7 +127,7 @@ app.get('/api/events/blob', async (req, res) => {
 app.get('/api/favorites', async (_req, res) => {
   try {
     const favorites = await downloadFavoritesFromBlob();
-    res.json({ favorites });
+    res.json({ favorites: favorites.map((f) => (f.id ? f : migrateLegacyFavorite(f))) });
   } catch (err) {
     console.error('Favorites load failed:', err);
     res.status(500).json({ error: err.message ?? 'Favorites load failed' });

@@ -28,7 +28,7 @@ export function formatDaysLeft(days) {
  * @param {Array} events
  */
 export function mergeFavoriteWithLiveEvent(favorite, events) {
-  const live = events.find((e) => e.url === favorite.url);
+  const live = events.find((e) => e.id === favorite.id);
   return live ? { ...favorite, ...live } : favorite;
 }
 
@@ -49,13 +49,15 @@ export function sortFavorites(favorites, todayIso) {
 /** @param {object} event */
 export function toFavoriteRecord(event) {
   return {
-    url: event.url,
+    id: event.id,
     name: event.name,
     date: event.date,
     time: event.time,
-    priceText: event.priceText,
-    site: event.site,
-    siteOrigin: event.siteOrigin ?? null,
+    cost: event.cost,
+    source: event.source,
+    sourceOrigin: event.sourceOrigin ?? null,
+    reference: event.reference,
+    referenceType: event.referenceType,
   };
 }
 
@@ -80,9 +82,9 @@ export function getUpcomingFavoritesHighlight(favorites, events, todayIso) {
   };
 }
 
-/** @param {{ date: string, events: Array<{ url: string }> } | null} highlight */
+/** @param {{ date: string, events: Array<{ id: string }> } | null} highlight */
 export function upcomingHighlightKey(highlight) {
   if (!highlight) return null;
-  const urls = highlight.events.map((e) => e.url).sort().join('\0');
-  return `${highlight.date}\0${urls}`;
+  const ids = highlight.events.map((e) => e.id).sort().join('\0');
+  return `${highlight.date}\0${ids}`;
 }

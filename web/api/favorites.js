@@ -4,6 +4,7 @@
 // touch it.
 
 import { get, put } from '@vercel/blob';
+import { createHash } from 'node:crypto';
 
 const FAVORITES_PATHNAME = 'favorites/favorites.json';
 
@@ -11,6 +12,32 @@ function todayIso() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Must stay byte-identical to computeEventId in src/portalEvent.js — both
+// backends read the same Blob store, and a mismatched hash would make the
+// same legacy favorite resolve to two different ids depending on which one
+// served the GET.
+function computeEventId({ source, reference, date, time }) {
+  const raw = `${source} ${reference} ${date} ${time ?? ''}`;
+  return createHash('sha1').update(raw, 'utf8').digest('hex').slice(0, 20);
+}
+
+// Upgrades a pre-Portal-Event favorite record ({url,name,date,time,priceText,
+// site,siteOrigin}) to the current shape. Every pre-migration favorite is
+// necessarily a site event, so referenceType: 'url' is always safe here.
+function migrateLegacyFavorite(f) {
+  return {
+    id: computeEventId({ source: f.site, reference: f.url, date: f.date, time: f.time }),
+    name: f.name,
+    date: f.date,
+    time: f.time,
+    cost: f.priceText,
+    source: f.site,
+    sourceOrigin: f.siteOrigin ?? null,
+    reference: f.url,
+    referenceType: 'url',
+  };
 }
 
 export default async function handler(req, res) {
@@ -25,7 +52,8 @@ export default async function handler(req, res) {
       }
       const text = await new Response(result.stream).text();
       const parsed = JSON.parse(text);
-      res.status(200).json({ favorites: Array.isArray(parsed) ? parsed : [] });
+      const favorites = Array.isArray(parsed) ? parsed : [];
+      res.status(200).json({ favorites: favorites.map((f) => (f.id ? f : migrateLegacyFavorite(f))) });
     } catch (err) {
       console.error('Favorites load failed:', err);
       res.status(500).json({ error: err.message ?? 'Favorites load failed' });

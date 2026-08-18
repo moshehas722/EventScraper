@@ -16,19 +16,23 @@ import * as zappa from './sites/zappa.js';
 import * as greenbear from './sites/greenbear.js';
 import * as bargiyora from './sites/bargiyora.js';
 import * as muzicenter from './sites/muzicenter.js';
+import { toPortalEventFromSite } from './portalEvent.js';
 
 export const SITES = [barby, ozen, hameretz2, levontin7, haezor, babebar, papaito, shablul, grayyehud, graymodiin, graytelaviv, teder, zappa, greenbear, bargiyora, muzicenter];
 
 /**
- * Fetch events from all venues, optionally filtered by date.
+ * Fetch events from all venues, optionally filtered by date. Returns Portal
+ * Events (see src/portalEvent.js) — every site module still returns its
+ * native shape; the mapping happens once here.
  * @param {{ date?: string, all?: boolean, quiet?: boolean }} opts
- * @returns {Promise<Array<{ site: string, name: string, date: string, time: string, priceText: string, url: string }>>}
+ * @returns {Promise<Array>}
  */
 export async function scrapeEvents({ date, all = false, quiet = true } = {}) {
   const { fetchAllSites, setProgressQuiet } = await import('./progress.js');
   setProgressQuiet(quiet);
 
   let events = await fetchAllSites(SITES);
+  events = events.map(toPortalEventFromSite);
 
   if (!all && date) {
     events = events.filter((e) => e.date === date);

@@ -5,6 +5,7 @@ import { get, put } from '@vercel/blob';
 import { requireToken } from '../blob.js';
 
 const WHATSAPP_MESSAGES_PATHNAME = 'whatsapp/messages.json';
+const WHATSAPP_EVENTS_PATHNAME = 'whatsapp/events.json';
 const WHATSAPP_PLUGIN_SECRET_PATHNAME = 'whatsapp/plugin-secret.json';
 
 /**
@@ -28,6 +29,38 @@ export async function downloadWhatsAppMessages() {
 export async function saveWhatsAppMessages(messages) {
   const token = requireToken();
   return put(WHATSAPP_MESSAGES_PATHNAME, JSON.stringify(messages, null, 2), {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
+    token,
+  });
+}
+
+/**
+ * Load the Portal-Event-shaped view of extracted WhatsApp events from Blob
+ * (see src/portalEvent.js). Derived from, and pruned alongside, the raw
+ * "WhatsApp Messages" store — only entries where the LLM found a real,
+ * dateable event.
+ * @returns {Promise<Array>} empty array if nothing has been stored yet
+ */
+export async function downloadWhatsAppEvents() {
+  const token = requireToken();
+  const result = await get(WHATSAPP_EVENTS_PATHNAME, { access: 'private', token, useCache: false });
+  if (!result) return [];
+
+  const text = await new Response(result.stream).text();
+  const parsed = JSON.parse(text);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/**
+ * Overwrite the Portal-Event-shaped WhatsApp events store in Vercel Blob.
+ * @param {Array} events
+ */
+export async function saveWhatsAppEvents(events) {
+  const token = requireToken();
+  return put(WHATSAPP_EVENTS_PATHNAME, JSON.stringify(events, null, 2), {
     access: 'private',
     addRandomSuffix: false,
     allowOverwrite: true,
