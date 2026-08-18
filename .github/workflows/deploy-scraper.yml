@@ -29,6 +29,7 @@ jobs:
           BLOB_STORE_ID: ${{ secrets.BLOB_STORE_ID }}
           WHATSAPP_MAIN_SERVICE_URL: ${{ secrets.WHATSAPP_MAIN_SERVICE_URL }}
           WHATSAPP_PLUGIN_BASE_URL: ${{ secrets.WHATSAPP_PLUGIN_BASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           docker stop eventscraper-scraper || true
           docker rm eventscraper-scraper || true
@@ -42,6 +43,7 @@ jobs:
             -e BLOB_STORE_ID \
             -e WHATSAPP_MAIN_SERVICE_URL \
             -e WHATSAPP_PLUGIN_BASE_URL \
+            -e GEMINI_API_KEY \
             eventscraper-scraper
 
       - name: Health check

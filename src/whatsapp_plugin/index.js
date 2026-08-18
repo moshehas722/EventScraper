@@ -1,7 +1,8 @@
 // "Event Scraper for WhatsApp" — a silent WhatsApp agent plugin mounted onto
 // the scraper's own always-up Express server (see server.js). It never
 // replies; it only stores every incoming message to the "WhatsApp Messages"
-// Blob store and prunes entries older than the configured retention window.
+// Blob store — enriched with an LLM-extracted event summary (see llm.js) —
+// and prunes entries older than the configured retention window.
 //
 // Registers against the WhatsApp agent's main service using the standard
 // remote-plugin HTTP contract (POST /plugins/register, POST /on-message,
@@ -14,14 +15,18 @@ import {
   loadWhatsAppPluginSecret,
   saveWhatsAppPluginSecret,
 } from './blob.js';
+import { extractEventFromMessage } from './llm.js';
 
-// Node doesn't auto-load .env.local; blob.js only does so lazily on first
-// use, which is too late here since mountWhatsAppPlugin() reads env vars
-// synchronously at server startup, before any blob call has happened.
-try {
-  process.loadEnvFile('.env.local');
-} catch {
-  // no .env.local present; rely on already-set environment variables (e.g. Docker's -e flags)
+// Node doesn't auto-load .env files; server.js's own loader runs before this
+// module's exported mountWhatsAppPlugin() is called, but not before this
+// module's own top-level code (ES imports evaluate before the importer's
+// body), so load defensively here too.
+for (const envFile of ['.env', '.env.local']) {
+  try {
+    process.loadEnvFile(envFile);
+  } catch {
+    // file missing or unreadable; rely on already-set environment variables
+  }
 }
 
 const PLUGIN_ID = process.env.WHATSAPP_PLUGIN_ID || 'event-scraper-for-whatsapp';
@@ -89,6 +94,12 @@ export function mountWhatsAppPlugin(app) {
     return;
   }
 
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn(
+      '[whatsapp-plugin] GEMINI_API_KEY not set — messages will be stored without event extraction.',
+    );
+  }
+
   let secret;
 
   async function registerWithMain() {
@@ -102,7 +113,7 @@ export function mountWhatsAppPlugin(app) {
         body: JSON.stringify({
           pluginId: PLUGIN_ID,
           name: 'Event Scraper for WhatsApp',
-          description: 'Silently stores every incoming message to Blob and prunes it after a configurable retention period. Never replies.',
+          description: 'Silently stores every incoming message to Blob (with an LLM-extracted event summary) and prunes it after a configurable retention period. Never replies.',
           baseUrl: pluginBaseUrl,
           configJsonSchema: CONFIG_JSON_SCHEMA,
         }),
@@ -136,6 +147,14 @@ export function mountWhatsAppPlugin(app) {
 
   async function handleMessage({ chatJid, message, config }) {
     const retentionDays = normalizeRetentionDays(config);
+
+    let event = null;
+    try {
+      event = await extractEventFromMessage(message.text);
+    } catch (err) {
+      console.error('[whatsapp-plugin] event extraction failed:', err.message);
+    }
+
     const entry = {
       chatJid,
       id: message.id,
@@ -145,6 +164,7 @@ export function mountWhatsAppPlugin(app) {
       timestamp: message.timestamp,
       text: message.text,
       receivedAt: Date.now(),
+      event,
     };
     try {
       const remaining = await storeAndPrune(entry, retentionDays);

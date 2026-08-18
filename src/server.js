@@ -11,9 +11,9 @@ import {
   uploadFavoritesToBlob,
   downloadBlacklistFromBlob,
   uploadBlacklistToBlob,
-  downloadWhatsAppMessages,
 } from './blob.js';
-import { mountWhatsAppPlugin } from './whatsappPlugin.js';
+import { downloadWhatsAppMessages } from './whatsapp_plugin/blob.js';
+import { mountWhatsAppPlugin } from './whatsapp_plugin/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
