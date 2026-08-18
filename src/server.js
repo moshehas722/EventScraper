@@ -5,7 +5,13 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scrapeEvents, todayIso, SITES } from './registry.js';
-import { downloadEventsFromBlob, downloadFavoritesFromBlob, uploadFavoritesToBlob } from './blob.js';
+import {
+  downloadEventsFromBlob,
+  downloadFavoritesFromBlob,
+  uploadFavoritesToBlob,
+  downloadWhatsAppMessages,
+} from './blob.js';
+import { mountWhatsAppPlugin } from './whatsappPlugin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -97,6 +103,18 @@ app.put('/api/favorites', async (req, res) => {
     res.status(500).json({ error: err.message ?? 'Favorites save failed' });
   }
 });
+
+app.get('/api/whatsapp-messages', async (_req, res) => {
+  try {
+    const messages = await downloadWhatsAppMessages();
+    res.json({ messages });
+  } catch (err) {
+    console.error('WhatsApp messages load failed:', err);
+    res.status(500).json({ error: err.message ?? 'WhatsApp messages load failed' });
+  }
+});
+
+mountWhatsAppPlugin(app);
 
 // Serve built React app in production
 app.use(express.static(WEB_DIST));

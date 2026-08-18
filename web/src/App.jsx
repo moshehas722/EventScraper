@@ -143,6 +143,10 @@ export default function App() {
   const [favorites, setFavorites] = useState(/** @type {Array} */ ([]));
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [favoritesError, setFavoritesError] = useState(null);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [whatsappMessages, setWhatsappMessages] = useState(/** @type {Array} */ ([]));
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
+  const [whatsappError, setWhatsappError] = useState(null);
   // Guards against the initial (still-empty) render's state overwriting the
   // saved selection in localStorage before the auto-load-on-mount fetch resolves.
   const hydratedRef = useRef(false);
@@ -224,6 +228,43 @@ export default function App() {
       persistFavorites(next);
     },
     [favorites, favoritesLoaded, persistFavorites],
+  );
+
+  // Refetched every time the panel opens (rather than loaded once, like
+  // favorites) since new messages arrive continuously in the background via
+  // the WhatsApp plugin, independent of anything this UI does.
+  const loadWhatsAppMessages = useCallback(async () => {
+    setWhatsappLoading(true);
+    setWhatsappError(null);
+    try {
+      const res = await fetch('/api/whatsapp-messages');
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      setWhatsappMessages(Array.isArray(data.messages) ? data.messages : []);
+    } catch {
+      setWhatsappError('Failed to load WhatsApp messages — try again.');
+    } finally {
+      setWhatsappLoading(false);
+    }
+  }, []);
+
+  const toggleWhatsapp = useCallback(() => {
+    setFavoritesOpen(false);
+    setWhatsappOpen((wasOpen) => {
+      const next = !wasOpen;
+      if (next) loadWhatsAppMessages();
+      return next;
+    });
+  }, [loadWhatsAppMessages]);
+
+  const openFavorites = useCallback(() => {
+    setWhatsappOpen(false);
+    setFavoritesOpen((v) => !v);
+  }, []);
+
+  const sortedWhatsappMessages = useMemo(
+    () => [...whatsappMessages].sort((a, b) => (b.receivedAt ?? 0) - (a.receivedAt ?? 0)),
+    [whatsappMessages],
   );
 
   const sources = [...new Set(events.map((e) => e.site))].sort((a, b) => a.localeCompare(b));
@@ -388,23 +429,85 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <h1>What's Happening...</h1>
-          <button
-            type="button"
-            className="favorites-toggle"
-            aria-pressed={favoritesOpen}
-            aria-expanded={favoritesOpen}
-            onClick={() => setFavoritesOpen((v) => !v)}
-          >
-            <span className="favorites-toggle-icon" aria-hidden>
-              ♥
-            </span>
-            Favorites
-            {favorites.length > 0 && (
-              <span className="favorites-count">{favorites.length}</span>
-            )}
-          </button>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="whatsapp-toggle"
+              aria-pressed={whatsappOpen}
+              aria-expanded={whatsappOpen}
+              onClick={toggleWhatsapp}
+            >
+              <span className="whatsapp-toggle-icon" aria-hidden>
+                💬
+              </span>
+              WhatsApp Messages
+              {whatsappMessages.length > 0 && (
+                <span className="whatsapp-count">{whatsappMessages.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="favorites-toggle"
+              aria-pressed={favoritesOpen}
+              aria-expanded={favoritesOpen}
+              onClick={openFavorites}
+            >
+              <span className="favorites-toggle-icon" aria-hidden>
+                ♥
+              </span>
+              Favorites
+              {favorites.length > 0 && (
+                <span className="favorites-count">{favorites.length}</span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
+
+      {whatsappOpen && (
+        <div className="whatsapp-panel" role="dialog" aria-label="WhatsApp Messages">
+          <div className="whatsapp-panel-header">
+            <h2>WhatsApp Messages</h2>
+            <button
+              type="button"
+              className="whatsapp-panel-close"
+              aria-label="Close WhatsApp messages"
+              onClick={() => setWhatsappOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+
+          {whatsappError && <p className="whatsapp-panel-error">{whatsappError}</p>}
+
+          {whatsappLoading && <p className="whatsapp-panel-empty">Loading…</p>}
+
+          {!whatsappLoading && !whatsappError && sortedWhatsappMessages.length === 0 && (
+            <p className="whatsapp-panel-empty">No messages stored yet.</p>
+          )}
+
+          {!whatsappLoading && sortedWhatsappMessages.length > 0 && (
+            <ul className="whatsapp-list">
+              {sortedWhatsappMessages.map((m) => (
+                <li key={m.id ?? `${m.chatJid}-${m.receivedAt}`} className="whatsapp-item">
+                  <div className="whatsapp-item-meta">
+                    <span className="whatsapp-item-sender">
+                      {m.senderName || m.sender || 'Unknown'}
+                    </span>
+                    {m.receivedAt && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>{new Date(m.receivedAt).toLocaleString()}</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="whatsapp-item-text">{m.text}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {favoritesOpen && (
         <div className="favorites-panel" role="dialog" aria-label="Favorites">

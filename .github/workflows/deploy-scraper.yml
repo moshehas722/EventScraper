@@ -21,6 +21,8 @@ jobs:
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           BLOB_STORE_ID: ${{ secrets.BLOB_STORE_ID }}
+          WHATSAPP_MAIN_SERVICE_URL: ${{ secrets.WHATSAPP_MAIN_SERVICE_URL }}
+          WHATSAPP_PLUGIN_BASE_URL: ${{ secrets.WHATSAPP_PLUGIN_BASE_URL }}
         run: |
           docker stop eventscraper-scraper || true
           docker rm eventscraper-scraper || true
@@ -30,6 +32,8 @@ jobs:
             -p 3001:3001 \
             -e BLOB_READ_WRITE_TOKEN \
             -e BLOB_STORE_ID \
+            -e WHATSAPP_MAIN_SERVICE_URL \
+            -e WHATSAPP_PLUGIN_BASE_URL \
             eventscraper-scraper
 
       - name: Health check
