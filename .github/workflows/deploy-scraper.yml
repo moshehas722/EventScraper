@@ -30,6 +30,7 @@ jobs:
             --name eventscraper-scraper \
             --restart unless-stopped \
             -p 3001:3001 \
+            -e PORT=3001 \
             -e BLOB_READ_WRITE_TOKEN \
             -e BLOB_STORE_ID \
             -e WHATSAPP_MAIN_SERVICE_URL \

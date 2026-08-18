@@ -58,3 +58,31 @@ export function toFavoriteRecord(event) {
     siteOrigin: event.siteOrigin ?? null,
   };
 }
+
+/**
+ * Favorites on the nearest upcoming date (today or later). Returns null if none.
+ * @param {Array} favorites
+ * @param {Array} events
+ * @param {string} todayIso
+ */
+export function getUpcomingFavoritesHighlight(favorites, events, todayIso) {
+  const upcoming = favorites
+    .map((f) => mergeFavoriteWithLiveEvent(f, events))
+    .filter((f) => f.date >= todayIso)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+  if (upcoming.length === 0) return null;
+
+  const nearestDate = upcoming[0].date;
+  return {
+    date: nearestDate,
+    events: upcoming.filter((f) => f.date === nearestDate),
+  };
+}
+
+/** @param {{ date: string, events: Array<{ url: string }> } | null} highlight */
+export function upcomingHighlightKey(highlight) {
+  if (!highlight) return null;
+  const urls = highlight.events.map((e) => e.url).sort().join('\0');
+  return `${highlight.date}\0${urls}`;
+}

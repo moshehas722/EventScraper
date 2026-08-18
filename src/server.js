@@ -9,12 +9,25 @@ import {
   downloadEventsFromBlob,
   downloadFavoritesFromBlob,
   uploadFavoritesToBlob,
+  downloadBlacklistFromBlob,
+  uploadBlacklistToBlob,
   downloadWhatsAppMessages,
 } from './blob.js';
 import { mountWhatsAppPlugin } from './whatsappPlugin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT) || 3001;
+const rootDir = path.join(__dirname, '..');
+
+for (const envFile of ['.env', '.env.local']) {
+  try {
+    process.loadEnvFile(path.join(rootDir, envFile));
+  } catch {
+    // file missing or unreadable
+  }
+}
+
+// Default 3101 — Windows often reserves 2939–3038 (3001 fails with EACCES).
+const PORT = Number(process.env.PORT) || 3101;
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
 
 const app = express();
@@ -104,6 +117,31 @@ app.put('/api/favorites', async (req, res) => {
   }
 });
 
+app.get('/api/blacklist', async (_req, res) => {
+  try {
+    const blacklist = await downloadBlacklistFromBlob();
+    res.json({ blacklist });
+  } catch (err) {
+    console.error('Blacklist load failed:', err);
+    res.status(500).json({ error: err.message ?? 'Blacklist load failed' });
+  }
+});
+
+app.put('/api/blacklist', async (req, res) => {
+  const { blacklist } = req.body ?? {};
+  if (!Array.isArray(blacklist)) {
+    return res.status(400).json({ error: 'Body must be { blacklist: [...] }' });
+  }
+
+  try {
+    await uploadBlacklistToBlob(blacklist);
+    res.json({ blacklist });
+  } catch (err) {
+    console.error('Blacklist save failed:', err);
+    res.status(500).json({ error: err.message ?? 'Blacklist save failed' });
+  }
+});
+
 app.get('/api/whatsapp-messages', async (_req, res) => {
   try {
     const messages = await downloadWhatsAppMessages();
@@ -125,6 +163,16 @@ app.get('*', (req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`EventScraper API listening on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${PORT} is already in use. Stop the other process or set PORT in .env.`,
+    );
+    process.exit(1);
+  }
+  throw err;
 });

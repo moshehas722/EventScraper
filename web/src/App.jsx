@@ -9,10 +9,17 @@ import {
 import {
   daysUntil,
   formatDaysLeft,
+  getUpcomingFavoritesHighlight,
   mergeFavoriteWithLiveEvent,
+  upcomingHighlightKey,
   sortFavorites,
   toFavoriteRecord,
 } from './favorites.js';
+import {
+  eventKey,
+  sortBlacklist,
+  toBlacklistRecord,
+} from './blacklist.js';
 import './App.css';
 
 function todayIso() {
@@ -55,20 +62,42 @@ function formatMonthDay(iso) {
   });
 }
 
-/** @typedef {'today' | 'tomorrow' | 'plus2' | 'plus3' | 'week' | 'all' | 'date'} DateFilterMode */
+function formatShortDateTime(d) {
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatCompactScope(mode, selectedDate) {
+  const dayIso = getFilterDayIso(mode, selectedDate);
+  if (dayIso) return `${formatDayName(dayIso, 'short')}, ${formatMonthDay(dayIso)}`;
+  if (mode === 'week') {
+    const today = todayIso();
+    return `${formatMonthDay(today)}–${formatMonthDay(addDays(today, 6))}`;
+  }
+  return null;
+}
+
+/** @typedef {'today' | 'tomorrow' | `plus${number}` | 'week' | 'date'} DateFilterMode */
+
+function dayOffsetFromMode(mode) {
+  if (mode === 'today') return 0;
+  if (mode === 'tomorrow') return 1;
+  const match = mode.match(/^plus(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
 
 function getFilterDayIso(mode, selectedDate) {
-  const today = todayIso();
-  if (mode === 'today') return today;
-  if (mode === 'tomorrow') return addDays(today, 1);
-  if (mode === 'plus2') return addDays(today, 2);
-  if (mode === 'plus3') return addDays(today, 3);
+  const offset = dayOffsetFromMode(mode);
+  if (offset !== null) return addDays(todayIso(), offset);
   if (mode === 'date') return selectedDate;
   return null;
 }
 
 function matchesDateFilter(eventDate, mode, selectedDate) {
-  if (mode === 'all') return true;
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return eventDate === dayIso;
   if (mode === 'week') {
@@ -79,7 +108,6 @@ function matchesDateFilter(eventDate, mode, selectedDate) {
 }
 
 function dateFilterLabel(mode, selectedDate) {
-  if (mode === 'all') return 'all dates';
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return formatDisplayDate(dayIso);
   const today = todayIso();
@@ -88,15 +116,35 @@ function dateFilterLabel(mode, selectedDate) {
 
 function buildDateFilters() {
   const today = todayIso();
-  return [
-    { id: 'today', label: 'Today' },
-    { id: 'tomorrow', label: 'Tomorrow' },
-    { id: 'plus2', label: formatDayName(addDays(today, 2)) },
-    { id: 'plus3', label: formatDayName(addDays(today, 3)) },
-    { id: 'week', label: 'This Week' },
-    { id: 'all', label: 'All' },
-    { id: 'date', label: 'Date' },
+  /** @type {Array<{ id: DateFilterMode, label: string, compactLabel: string, title: string }>} */
+  const filters = [
+    { id: 'today', label: 'Today', compactLabel: 'Now', title: formatDisplayDate(today) },
   ];
+
+  for (let offset = 1; offset <= 6; offset += 1) {
+    const iso = addDays(today, offset);
+    filters.push({
+      id: offset === 1 ? 'tomorrow' : /** @type {DateFilterMode} */ (`plus${offset}`),
+      label: formatDayName(iso, 'short'),
+      compactLabel: formatDayName(iso, 'short').slice(0, 2),
+      title: formatDisplayDate(iso),
+    });
+  }
+
+  filters.push({
+    id: 'week',
+    label: 'Week',
+    compactLabel: 'Wk',
+    title: `${formatDisplayDate(today)} – ${formatDisplayDate(addDays(today, 6))}`,
+  });
+  filters.push({
+    id: 'date',
+    label: 'Date',
+    compactLabel: 'Cal',
+    title: 'Pick a specific date',
+  });
+
+  return filters;
 }
 
 function GroupCheckbox({ checked, indeterminate, onChange, label }) {
@@ -121,7 +169,9 @@ function GroupCheckbox({ checked, indeterminate, onChange, label }) {
 
 // Live scraping talks to the local Express API (proxied by Vite in dev) —
 // there's no such backend on the deployed (Vercel) build, only Blob storage.
-const liveScrapeEnabled = import.meta.env.DEV;
+// Set VITE_DISABLE_BLOB=true in .env to skip Blob auto-load and show the button.
+const disableBlob = import.meta.env.VITE_DISABLE_BLOB === 'true';
+const liveScrapeEnabled = import.meta.env.DEV || disableBlob;
 
 export default function App() {
   const initialUi = useMemo(() => loadUiState(), []);
@@ -134,6 +184,12 @@ export default function App() {
   const [collapsedGroups, setCollapsedGroups] = useState(
     () => initialUi?.collapsedGroups ?? new Set(),
   );
+  const [sourcesPanelCollapsed, setSourcesPanelCollapsed] = useState(
+    () => initialUi?.sourcesPanelCollapsed ?? true,
+  );
+  const [dismissedUpcomingBannerKey, setDismissedUpcomingBannerKey] = useState(
+    /** @type {string | null} */ (null),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
@@ -143,6 +199,9 @@ export default function App() {
   const [favorites, setFavorites] = useState(/** @type {Array} */ ([]));
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [favoritesError, setFavoritesError] = useState(null);
+  const [blacklist, setBlacklist] = useState(/** @type {Array} */ ([]));
+  const [blacklistOpen, setBlacklistOpen] = useState(false);
+  const [blacklistError, setBlacklistError] = useState(null);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [whatsappMessages, setWhatsappMessages] = useState(/** @type {Array} */ ([]));
   const [whatsappLoading, setWhatsappLoading] = useState(false);
@@ -165,8 +224,14 @@ export default function App() {
   useEffect(() => {
     if (!hydratedRef.current) return;
     const knownSources = [...new Set(events.map((e) => e.site))];
-    saveUiState({ selectedSources, knownSources, multiSelect, collapsedGroups });
-  }, [events, selectedSources, multiSelect, collapsedGroups]);
+    saveUiState({
+      selectedSources,
+      knownSources,
+      multiSelect,
+      collapsedGroups,
+      sourcesPanelCollapsed,
+    });
+  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesPanelCollapsed]);
 
   // Guards toggleFavorite against running before the initial GET resolves —
   // otherwise a click that races the load would save based on a stale
@@ -181,6 +246,9 @@ export default function App() {
   // could overwrite it back to the pre-click state. Only the first
   // invocation's fetch is allowed to actually run.
   const favoritesLoadStartedRef = useRef(false);
+  const [blacklistLoaded, setBlacklistLoaded] = useState(false);
+  const blacklistPersistRequestIdRef = useRef(0);
+  const blacklistLoadStartedRef = useRef(false);
 
   useEffect(() => {
     if (favoritesLoadStartedRef.current) return;
@@ -190,6 +258,16 @@ export default function App() {
       .then((data) => setFavorites(Array.isArray(data.favorites) ? data.favorites : []))
       .catch(() => {})
       .finally(() => setFavoritesLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    if (blacklistLoadStartedRef.current) return;
+    blacklistLoadStartedRef.current = true;
+    fetch('/api/blacklist')
+      .then((res) => (res.ok ? res.json() : { blacklist: [] }))
+      .then((data) => setBlacklist(Array.isArray(data.blacklist) ? data.blacklist : []))
+      .catch(() => {})
+      .finally(() => setBlacklistLoaded(true));
   }, []);
 
   const persistFavorites = useCallback(async (next) => {
@@ -230,6 +308,40 @@ export default function App() {
     [favorites, favoritesLoaded, persistFavorites],
   );
 
+  const persistBlacklist = useCallback(async (next) => {
+    const requestId = ++blacklistPersistRequestIdRef.current;
+    try {
+      setBlacklistError(null);
+      const res = await fetch('/api/blacklist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blacklist: next }),
+        keepalive: true,
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      if (requestId === blacklistPersistRequestIdRef.current && Array.isArray(data.blacklist)) {
+        setBlacklist(data.blacklist);
+      }
+    } catch {
+      setBlacklistError('Failed to save hidden events — try again.');
+    }
+  }, []);
+
+  const toggleBlacklist = useCallback(
+    (event) => {
+      if (!blacklistLoaded) return;
+      const key = eventKey(event);
+      const exists = blacklist.some((entry) => eventKey(entry) === key);
+      const next = exists
+        ? blacklist.filter((entry) => eventKey(entry) !== key)
+        : [...blacklist, toBlacklistRecord(event)];
+      setBlacklist(next);
+      persistBlacklist(next);
+    },
+    [blacklist, blacklistLoaded, persistBlacklist],
+  );
+
   // Refetched every time the panel opens (rather than loaded once, like
   // favorites) since new messages arrive continuously in the background via
   // the WhatsApp plugin, independent of anything this UI does.
@@ -249,18 +361,12 @@ export default function App() {
   }, []);
 
   const toggleWhatsapp = useCallback(() => {
-    setFavoritesOpen(false);
     setWhatsappOpen((wasOpen) => {
       const next = !wasOpen;
       if (next) loadWhatsAppMessages();
       return next;
     });
   }, [loadWhatsAppMessages]);
-
-  const openFavorites = useCallback(() => {
-    setWhatsappOpen(false);
-    setFavoritesOpen((v) => !v);
-  }, []);
 
   const sortedWhatsappMessages = useMemo(
     () => [...whatsappMessages].sort((a, b) => (b.receivedAt ?? 0) - (a.receivedAt ?? 0)),
@@ -274,6 +380,7 @@ export default function App() {
   );
 
   const favoriteUrls = useMemo(() => new Set(favorites.map((f) => f.url)), [favorites]);
+  const blacklistKeys = useMemo(() => new Set(blacklist.map((entry) => eventKey(entry))), [blacklist]);
   const sortedFavorites = useMemo(() => {
     const today = todayIso();
     const enriched = favorites.map((f) => {
@@ -282,6 +389,14 @@ export default function App() {
     });
     return sortFavorites(enriched, today);
   }, [favorites, events]);
+  const sortedBlacklist = useMemo(() => sortBlacklist(blacklist), [blacklist]);
+  const upcomingFavoriteHighlight = useMemo(() => {
+    if (!favoritesLoaded) return null;
+    return getUpcomingFavoritesHighlight(favorites, events, todayIso());
+  }, [favorites, events, favoritesLoaded]);
+  const upcomingBannerVisible =
+    upcomingFavoriteHighlight &&
+    upcomingHighlightKey(upcomingFavoriteHighlight) !== dismissedUpcomingBannerKey;
 
   const toggleSource = (name) => {
     setSelectedSources((prev) => {
@@ -330,9 +445,11 @@ export default function App() {
   };
 
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
-  const filteredEvents = dateEvents.filter((e) => selectedSources.has(e.site));
+  const sourceFilteredEvents = dateEvents.filter((e) => selectedSources.has(e.site));
+  const filteredEvents = sourceFilteredEvents.filter((e) => !blacklistKeys.has(eventKey(e)));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
-  const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
+  const blacklistActive = sourceFilteredEvents.length > filteredEvents.length;
+  const showDateColumn = dateFilter === 'week';
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
 
@@ -377,12 +494,13 @@ export default function App() {
   );
 
   useEffect(() => {
-    loadFromBlob();
+    if (!disableBlob) loadFromBlob();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const scopeLabel = dateFilterLabel(dateFilter, date);
-  const filterActive = sourceFilterActive;
+  const scopeCompact = formatCompactScope(dateFilter, date);
+  const filterActive = sourceFilterActive || blacklistActive;
   const displayCount = filteredEvents.length;
   const scopeCount = dateEvents.length;
 
@@ -435,14 +553,37 @@ export default function App() {
               className="whatsapp-toggle"
               aria-pressed={whatsappOpen}
               aria-expanded={whatsappOpen}
+              aria-label={
+                whatsappMessages.length > 0
+                  ? `WhatsApp Messages (${whatsappMessages.length})`
+                  : 'WhatsApp Messages'
+              }
               onClick={toggleWhatsapp}
             >
               <span className="whatsapp-toggle-icon" aria-hidden>
                 💬
               </span>
-              WhatsApp Messages
+              <span className="whatsapp-toggle-text">WhatsApp Messages</span>
               {whatsappMessages.length > 0 && (
                 <span className="whatsapp-count">{whatsappMessages.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="blacklist-toggle"
+              aria-pressed={blacklistOpen}
+              aria-expanded={blacklistOpen}
+              aria-label={
+                blacklist.length > 0 ? `Hidden events (${blacklist.length})` : 'Hidden events'
+              }
+              onClick={() => setBlacklistOpen((v) => !v)}
+            >
+              <span className="blacklist-toggle-icon" aria-hidden>
+                ✕
+              </span>
+              <span className="blacklist-toggle-text">Hidden</span>
+              {blacklist.length > 0 && (
+                <span className="blacklist-count">{blacklist.length}</span>
               )}
             </button>
             <button
@@ -450,12 +591,15 @@ export default function App() {
               className="favorites-toggle"
               aria-pressed={favoritesOpen}
               aria-expanded={favoritesOpen}
-              onClick={openFavorites}
+              aria-label={
+                favorites.length > 0 ? `Favorites (${favorites.length})` : 'Favorites'
+              }
+              onClick={() => setFavoritesOpen((v) => !v)}
             >
               <span className="favorites-toggle-icon" aria-hidden>
                 ♥
               </span>
-              Favorites
+              <span className="favorites-toggle-text">Favorites</span>
               {favorites.length > 0 && (
                 <span className="favorites-count">{favorites.length}</span>
               )}
@@ -463,6 +607,92 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {upcomingBannerVisible && (
+        <div className="upcoming-favorites-banner" role="status" aria-live="polite">
+          <div className="upcoming-favorites-banner-header">
+            <span className="upcoming-favorites-banner-icon" aria-hidden>
+              ♥
+            </span>
+            <span className="upcoming-favorites-banner-label">
+              Next up · {formatDaysLeft(daysUntil(todayIso(), upcomingFavoriteHighlight.date))}
+              {' · '}
+              {formatDayName(upcomingFavoriteHighlight.date, 'short')}, {formatMonthDay(upcomingFavoriteHighlight.date)}
+            </span>
+            <button
+              type="button"
+              className="upcoming-favorites-banner-close"
+              aria-label="Dismiss upcoming favorites"
+              onClick={() =>
+                setDismissedUpcomingBannerKey(upcomingHighlightKey(upcomingFavoriteHighlight))
+              }
+            >
+              ✕
+            </button>
+          </div>
+          <ul className="upcoming-favorites-banner-list">
+            {upcomingFavoriteHighlight.events.map((f) => (
+              <li key={f.url} className="upcoming-favorites-banner-item">
+                <a
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="upcoming-favorites-banner-name"
+                >
+                  {f.name}
+                </a>
+                <span className="upcoming-favorites-banner-meta">
+                  {f.time}
+                  <span aria-hidden> · </span>
+                  {f.site}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {blacklistOpen && (
+        <div className="blacklist-panel" role="dialog" aria-label="Hidden events">
+          <div className="blacklist-panel-header">
+            <h2>Hidden events</h2>
+            <button
+              type="button"
+              className="blacklist-panel-close"
+              aria-label="Close hidden events"
+              onClick={() => setBlacklistOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+
+          {blacklistError && <p className="blacklist-panel-error">{blacklistError}</p>}
+
+          {sortedBlacklist.length === 0 ? (
+            <p className="blacklist-panel-empty">
+              No hidden events — tap ✕ on any event to hide it from the list.
+            </p>
+          ) : (
+            <ul className="blacklist-list">
+              {sortedBlacklist.map((entry) => (
+                <li key={eventKey(entry)} className="blacklist-item">
+                  <button
+                    type="button"
+                    className="hide-btn hide-btn--active"
+                    aria-label={`Show ${entry.name} again`}
+                    onClick={() => toggleBlacklist(entry)}
+                  >
+                    ↩
+                  </button>
+                  <div className="blacklist-item-body">
+                    <span className="blacklist-item-name">{entry.name}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {whatsappOpen && (
         <div className="whatsapp-panel" role="dialog" aria-label="WhatsApp Messages">
@@ -569,10 +799,29 @@ export default function App() {
 
       <div className="app-body">
         {lastFetched && sources.length > 0 && (
-          <aside className="sources-sidebar card">
-            <div className="source-filter-header">
-              <span className="field-label">Sources</span>
-            </div>
+          <aside
+            className={`sources-sidebar card${sourcesPanelCollapsed ? ' sources-sidebar--collapsed' : ''}`}
+          >
+            <button
+              type="button"
+              className="sources-sidebar-toggle"
+              aria-expanded={!sourcesPanelCollapsed}
+              aria-controls="sources-panel-body"
+              aria-label={`Sources, ${selectedSources.size} of ${sources.length} selected`}
+              onClick={() => setSourcesPanelCollapsed((v) => !v)}
+            >
+              <span className="sources-sidebar-label">Sources</span>
+              <span className="sources-sidebar-summary">
+                {selectedSources.size}/{sources.length}
+              </span>
+              <span
+                className={`source-group-chevron${sourcesPanelCollapsed ? ' source-group-chevron--collapsed' : ''}`}
+                aria-hidden
+              >
+                ▾
+              </span>
+            </button>
+            <div id="sources-panel-body" className="sources-sidebar-body">
             <div className="source-options">
               <div className="source-bulk-actions">
                 <button type="button" className="link-btn" onClick={selectAllSources}>
@@ -669,6 +918,7 @@ export default function App() {
                 );
               })}
             </ul>
+            </div>
           </aside>
         )}
 
@@ -676,17 +926,22 @@ export default function App() {
         <section className="controls card">
           <div className="controls-row">
             <div className="date-filter">
-              <span className="field-label">When</span>
-              <div className="filter-segment" role="group" aria-label="Filter by date">
-                {dateFilters.map(({ id, label }) => (
+              <span className="field-label field-label--inline">When</span>
+              <div className="filter-segment filter-segment--compact" role="group" aria-label="Filter by date">
+                {dateFilters.map(({ id, label, compactLabel, title }) => (
                   <button
                     key={id}
                     type="button"
-                    className={`filter-segment-btn${dateFilter === id ? ' filter-segment-btn--selected' : ''}`}
+                    className={`filter-segment-btn filter-segment-btn--compact${dateFilter === id ? ' filter-segment-btn--selected' : ''}${id === 'today' ? ' filter-segment-btn--today' : ''}`}
                     aria-pressed={dateFilter === id}
-                    onClick={() => setDateFilter(/** @type {DateFilterMode} */ (id))}
+                    aria-label={title}
+                    title={title}
+                    onClick={() => setDateFilter(id)}
                   >
-                    {label}
+                    <span className="filter-segment-btn-label">{label}</span>
+                    <span className="filter-segment-btn-label filter-segment-btn-label--short" aria-hidden>
+                      {compactLabel}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -730,19 +985,15 @@ export default function App() {
 
           {lastFetched && !loading && (
             <p className="meta">
-              {source === 'blob'
-                ? `Loaded saved snapshot${snapshotUploadedAt ? ` from ${snapshotUploadedAt.toLocaleString()}` : ''}`
-                : `Last updated ${lastFetched.toLocaleTimeString()}`}
-              {' — '}
-              {filterActive ? `${displayCount} of ${scopeCount}` : displayCount}{' '}
-              event{displayCount === 1 ? '' : 's'} for {scopeLabel}
-              {filterActive && ' (filtered by source)'}
-              {events.length > 0 && (
-                <span className="meta-total"> · {events.length} total upcoming</span>
-              )}
+              <time dateTime={(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched).toISOString()}>
+                {formatShortDateTime(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched)}
+              </time>
+              {' · '}
+              {filterActive ? `${displayCount}/${scopeCount}` : displayCount} events
+              {scopeCompact && <> · {scopeCompact}</>}
             </p>
           )}
-          {loading && !lastFetched && (
+          {loading && !lastFetched && !disableBlob && (
             <p className="meta">Loading the latest snapshot…</p>
           )}
         </section>
@@ -756,7 +1007,11 @@ export default function App() {
         <section className="results card">
           {!lastFetched && !loading && !error && (
             <div className="empty-state">
-              <p>No events loaded yet.</p>
+              <p>
+                {disableBlob
+                  ? 'No events loaded yet. Click Fetch events to scrape from venues.'
+                  : 'No events loaded yet.'}
+              </p>
             </div>
           )}
 
@@ -774,7 +1029,11 @@ export default function App() {
 
           {lastFetched && dateEvents.length > 0 && filteredEvents.length === 0 && !loading && (
             <div className="empty-state">
-              <p>No events match the selected sources.</p>
+              <p>
+                {sourceFilteredEvents.length === 0
+                  ? 'No events match the selected sources.'
+                  : 'All matching events are hidden.'}
+              </p>
             </div>
           )}
 
@@ -822,23 +1081,34 @@ export default function App() {
                         <span>{e.site}</span>
                       </td>
                       <td className="name-cell">
-                        <button
-                          type="button"
-                          className={`favorite-btn${favoriteUrls.has(e.url) ? ' favorite-btn--active' : ''}`}
-                          aria-pressed={favoriteUrls.has(e.url)}
-                          disabled={!favoritesLoaded}
-                          aria-label={
-                            favoriteUrls.has(e.url)
-                              ? `Remove ${e.name} from favorites`
-                              : `Add ${e.name} to favorites`
-                          }
-                          onClick={() => toggleFavorite(e)}
-                        >
-                          {favoriteUrls.has(e.url) ? '♥' : '♡'}
-                        </button>
-                        <a href={e.url} target="_blank" rel="noopener noreferrer">
-                          {e.name}
-                        </a>
+                        <div className="event-row-actions">
+                          <button
+                            type="button"
+                            className={`favorite-btn${favoriteUrls.has(e.url) ? ' favorite-btn--active' : ''}`}
+                            aria-pressed={favoriteUrls.has(e.url)}
+                            disabled={!favoritesLoaded}
+                            aria-label={
+                              favoriteUrls.has(e.url)
+                                ? `Remove ${e.name} from favorites`
+                                : `Add ${e.name} to favorites`
+                            }
+                            onClick={() => toggleFavorite(e)}
+                          >
+                            {favoriteUrls.has(e.url) ? '♥' : '♡'}
+                          </button>
+                          <button
+                            type="button"
+                            className="hide-btn"
+                            disabled={!blacklistLoaded}
+                            aria-label={`Hide ${e.name}`}
+                            onClick={() => toggleBlacklist(e)}
+                          >
+                            ✕
+                          </button>
+                          <a href={e.url} target="_blank" rel="noopener noreferrer">
+                            {e.name}
+                          </a>
+                        </div>
                       </td>
                     </tr>
                     );
