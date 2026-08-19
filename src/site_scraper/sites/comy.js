@@ -28,6 +28,7 @@ export const meta = {
   location: 'Comy',
   currency: '₪',
   origin: ORIGIN,
+  aggregator: true,
 };
 
 /**
@@ -94,6 +95,7 @@ function normalizeEvent(item) {
     date,
     time,
     priceText: 'N/A',
+    category: 'standup',
     url,
   };
 }

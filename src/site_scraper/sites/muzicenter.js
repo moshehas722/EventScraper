@@ -29,6 +29,7 @@ export const meta = {
   location: 'Muzi (Center)',
   currency: '₪',
   origin: ORIGIN,
+  aggregator: true,
 };
 
 /**

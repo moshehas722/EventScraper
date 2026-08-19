@@ -17,7 +17,7 @@ import * as greenbear from './sites/greenbear.js';
 import * as bargiyora from './sites/bargiyora.js';
 import * as muzicenter from './sites/muzicenter.js';
 import * as comy from './sites/comy.js';
-import { toPortalEventFromSite } from '../portalEvent.js';
+import { toPortalEventFromSite, dedupeEvents } from '../portalEvent.js';
 
 export const SITES = [barby, ozen, hameretz2, levontin7, haezor, babebar, papaito, shablul, grayyehud, graymodiin, graytelaviv, teder, zappa, greenbear, bargiyora, muzicenter, comy];
 
@@ -34,6 +34,11 @@ export async function scrapeEvents({ date, all = false, quiet = true } = {}) {
 
   let events = await fetchAllSites(SITES);
   events = events.map(toPortalEventFromSite);
+  // Aggregators (Muzi/Zappa/Comy, meta.aggregator: true) can list the same
+  // event as the venue's own site. fetchAllSites() orders direct-venue
+  // results before aggregator results, so this first-occurrence-wins dedup
+  // keeps the venue's own copy over the aggregator's.
+  events = dedupeEvents(events);
 
   if (!all && date) {
     events = events.filter((e) => e.date === date);

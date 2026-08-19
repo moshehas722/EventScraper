@@ -10,6 +10,39 @@ function todayIso() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+// Zero-width joiner + variation selector-16 — left behind by
+// \p{Extended_Pictographic} when it strips a multi-codepoint emoji sequence.
+// Built from code points (rather than a literal in the regex) so the source
+// file doesn't contain invisible characters.
+const ZWJ_AND_VARIATION_SELECTOR = new RegExp(
+  `[${String.fromCodePoint(0x200d, 0xfe0f)}]`,
+  'g',
+);
+
+// Must stay byte-identical to the duplicate copy in src/portalEvent.js
+// (eventDedupeKey/dedupeEvents; self-contained Vercel function, no src/
+// imports).
+function eventDedupeKey({ name, date, time, location }) {
+  const compact = (text) =>
+    String(text ?? '')
+      .toLowerCase()
+      .replace(/\p{Extended_Pictographic}/gu, '')
+      .replace(ZWJ_AND_VARIATION_SELECTOR, '')
+      .replace(/[\p{P}\p{S}]/gu, '')
+      .replace(/\s+/g, '');
+  return `${date} ${time ?? ''}${compact(name)}${compact(location)}`;
+}
+
+function dedupeEvents(events) {
+  const seen = new Set();
+  return events.filter((event) => {
+    const key = eventDedupeKey(event);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export default async function handler(req, res) {
   const all = req.query.all === 'true' || req.query.all === '1';
   const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
@@ -47,7 +80,9 @@ export default async function handler(req, res) {
       console.error('WhatsApp events load failed (continuing with site events only):', err);
     }
 
-    const events = [...siteEvents, ...waEvents].sort(
+    // Site events listed first so a duplicate WhatsApp report of the same
+    // event (kept by eventDedupeKey) loses out to the structured site copy.
+    const events = dedupeEvents([...siteEvents, ...waEvents]).sort(
       (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time),
     );
 

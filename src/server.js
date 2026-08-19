@@ -14,7 +14,7 @@ import {
 } from './blob.js';
 import { downloadWhatsAppMessages, downloadWhatsAppEvents } from './whatsapp_plugin/blob.js';
 import { mountWhatsAppPlugin } from './whatsapp_plugin/index.js';
-import { computeEventId } from './portalEvent.js';
+import { computeEventId, dedupeEvents } from './portalEvent.js';
 
 // Upgrades a pre-Portal-Event favorite record ({url,name,date,time,priceText,
 // site,siteOrigin}) to the current shape. Every pre-migration favorite is
@@ -106,7 +106,9 @@ app.get('/api/events/blob', async (req, res) => {
       console.error('WhatsApp events load failed (continuing with site events only):', err);
     }
 
-    const events = [...snapshot.events, ...waEvents].sort(
+    // Site events listed first so a duplicate WhatsApp report of the same
+    // event (kept by eventDedupeKey) loses out to the structured site copy.
+    const events = dedupeEvents([...snapshot.events, ...waEvents]).sort(
       (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time),
     );
 

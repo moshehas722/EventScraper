@@ -35,6 +35,7 @@ export const meta = {
   location: 'Zappa Club',
   currency: '₪',
   origin: ORIGIN,
+  aggregator: true,
 };
 
 /**

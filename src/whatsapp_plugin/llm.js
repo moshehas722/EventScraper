@@ -3,7 +3,7 @@
 const DEFAULT_MODEL = 'gemini-3.6-flash';
 const REQUEST_TIMEOUT_MS = 30_000;
 
-export const EVENT_CATEGORIES = ['music', 'show', 'children', 'party', 'other'];
+export const EVENT_CATEGORIES = ['music', 'standup', 'show', 'children', 'party', 'other'];
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',

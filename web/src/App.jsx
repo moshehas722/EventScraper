@@ -158,15 +158,20 @@ function buildDateFilters() {
   return filters;
 }
 
+const CATEGORY_LABELS = {
+  standup: 'Stand-up',
+};
+
 function formatCategoryLabel(category) {
   if (!category || category === 'other') return 'Other';
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  return CATEGORY_LABELS[category] ?? category.charAt(0).toUpperCase() + category.slice(1);
 }
 
-const EVENT_CATEGORIES = ['music', 'show', 'children', 'party', 'other'];
+const EVENT_CATEGORIES = ['music', 'standup', 'show', 'children', 'party', 'other'];
 
 const CATEGORY_ICONS = {
   music: '🎵',
+  standup: '🎤',
   show: '🎭',
   children: '🧒',
   party: '🎉',

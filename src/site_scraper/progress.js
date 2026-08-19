@@ -2,7 +2,7 @@
 // Messages go to stderr so stdout stays clean for tables and --json.
 
 /** @typedef {{ log: (message: string) => void }} Progress */
-/** @typedef {{ meta: { name: string, origin?: string, location?: string }, fetchEvents: (progress?: Progress) => Promise<Array<object>> }} SiteModule */
+/** @typedef {{ meta: { name: string, origin?: string, location?: string, aggregator?: boolean }, fetchEvents: (progress?: Progress) => Promise<Array<object>> }} SiteModule */
 
 export const noopProgress = { log() {} };
 
@@ -29,6 +29,11 @@ export function createProgress(siteName) {
 /**
  * Fetch events from every registered site concurrently.
  * A single site failing does not prevent the others from returning.
+ *
+ * Direct-venue sites are ordered before aggregators (meta.aggregator: true,
+ * e.g. Muzi/Zappa/Comy, which list events happening at many other venues) so
+ * that scrapeEvents()'s first-occurrence-wins dedup keeps the venue's own
+ * listing over the aggregator's copy of the same event.
  * @param {SiteModule[]} sites
  * @returns {Promise<Array<object>>}
  */
@@ -38,12 +43,16 @@ export async function fetchAllSites(sites) {
   }
 
   const results = await Promise.allSettled(sites.map((site) => fetchSite(site)));
-  const events = [];
+  const direct = [];
+  const aggregated = [];
   results.forEach((result, i) => {
-    if (result.status === 'fulfilled') events.push(...result.value);
-    else console.error(`! ${sites[i].meta.name} failed: ${result.reason.message}`);
+    if (result.status !== 'fulfilled') {
+      console.error(`! ${sites[i].meta.name} failed: ${result.reason.message}`);
+      return;
+    }
+    (sites[i].meta.aggregator ? aggregated : direct).push(...result.value);
   });
-  return events;
+  return [...direct, ...aggregated];
 }
 
 /**
