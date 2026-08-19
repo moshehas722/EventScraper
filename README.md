@@ -53,6 +53,7 @@ The core then filters by day, merges all venues, sorts, and prints.
 | Green Bear (Hod Hasharon) | ✅ Working | Wix Events warmup JSON on greenbear.co.il (see below) |
 | Muzi (Center)         | ✅ Working | Center region archive pages (see below)      |
 | Bar Giyora (Tel Aviv)     | ✅ Working | admin-ajax `bargyora_products_filter` (see below) |
+| Comy (nationwide)     | ✅ Working | admin-ajax `comy_search` (see below)              |
 
 ## Usage
 
@@ -112,6 +113,7 @@ EventScraper/
         greenbear.js   Green Bear-specific fetch + normalize
         bargiyora.js   Bar Giyora-specific fetch + normalize
         muzicenter.js  Muzi Center-region fetch + normalize
+        comy.js        Comy-specific fetch + normalize
     whatsapp_plugin/
       index.js         WhatsApp agent plugin (stores messages + extracted events)
       blob.js          WhatsApp Blob stores (messages, events, plugin secret)
@@ -200,6 +202,17 @@ additional shows load via admin-ajax (`bargyora_products_filter`, sending
 `DD.MM.YYYY`; times are door opening (`פתיחת דלתות`). Ticket prices come from
 the WooCommerce Store API (`wc/store/v1/products?include=…`) batched by product
 id. The site may require `insecureTls` on networks with TLS interception.
+
+Comy (קומי, nationwide stand-up/comedy aggregator) is WordPress with a custom
+`comy/v1/shows` REST route that turns out to be POST-only and unused by the
+frontend. The homepage search widget instead calls admin-ajax
+`comy_search`, which returns the full upcoming catalog (~500+ shows across
+~140 venues) in a single POST — no pagination or per-venue lookups needed.
+Each entry's `timestamp` is Unix seconds whose UTC calendar/clock fields
+equal the Israel wall-clock date/time (verified against the site's own
+displayed strings), so date/time are read directly from the UTC components.
+No price field exists in the listing → `N/A`. The venue name doubles as the
+`site`/`location` suffix, e.g. `Comy (צוותא תל אביב)`.
 
 ## Adding a venue
 
