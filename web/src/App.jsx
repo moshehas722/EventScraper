@@ -158,9 +158,42 @@ function buildDateFilters() {
   return filters;
 }
 
-function formatWhatsappCategory(category) {
+function formatCategoryLabel(category) {
   if (!category || category === 'other') return 'Other';
   return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+const EVENT_CATEGORIES = ['music', 'show', 'children', 'party', 'other'];
+
+const CATEGORY_ICONS = {
+  music: '🎵',
+  show: '🎭',
+  children: '🧒',
+  party: '🎉',
+  other: '📌',
+};
+
+function categoryIcon(category) {
+  return CATEGORY_ICONS[category] ?? CATEGORY_ICONS.other;
+}
+
+/** @typedef {'all' | typeof EVENT_CATEGORIES[number]} TypeFilterMode */
+
+function matchesTypeFilter(category, mode) {
+  if (mode === 'all') return true;
+  return (category || 'other') === mode;
+}
+
+function buildTypeFilters() {
+  return [
+    { id: 'all', label: 'All', icon: '🗂️', title: 'All types' },
+    ...EVENT_CATEGORIES.map((category) => ({
+      id: category,
+      label: formatCategoryLabel(category),
+      icon: categoryIcon(category),
+      title: formatCategoryLabel(category),
+    })),
+  ];
 }
 
 function GroupCheckbox({ checked, indeterminate, onChange, label }) {
@@ -194,6 +227,7 @@ export default function App() {
 
   const [dateFilter, setDateFilter] = useState(/** @type {DateFilterMode} */ ('today'));
   const [date, setDate] = useState(todayIso);
+  const [typeFilter, setTypeFilter] = useState(/** @type {TypeFilterMode} */ ('all'));
   const [events, setEvents] = useState([]);
   const [selectedSources, setSelectedSources] = useState(() => new Set());
   const [multiSelect, setMultiSelect] = useState(() => initialUi?.multiSelect ?? true);
@@ -466,13 +500,16 @@ export default function App() {
   };
 
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
-  const sourceFilteredEvents = dateEvents.filter((e) => selectedSources.has(e.source));
+  const typeEvents = dateEvents.filter((e) => matchesTypeFilter(e.category, typeFilter));
+  const sourceFilteredEvents = typeEvents.filter((e) => selectedSources.has(e.source));
   const filteredEvents = sourceFilteredEvents.filter((e) => !isBlacklisted(e, blacklist));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
+  const typeFilterActive = typeFilter !== 'all';
   const blacklistActive = sourceFilteredEvents.length > filteredEvents.length;
   const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
+  const typeFilters = buildTypeFilters();
 
   const loadEvents = useCallback(async (endpoint, sourceKind) => {
     setLoading(true);
@@ -521,7 +558,7 @@ export default function App() {
 
   const scopeLabel = dateFilterLabel(dateFilter, date);
   const scopeCompact = formatCompactScope(dateFilter, date);
-  const filterActive = sourceFilterActive || blacklistActive;
+  const filterActive = sourceFilterActive || typeFilterActive || blacklistActive;
   const displayCount = filteredEvents.length;
   const scopeCount = dateEvents.length;
 
@@ -684,7 +721,7 @@ export default function App() {
       return (
         <p className="whatsapp-item-structured whatsapp-item-structured--none">
           No event detected
-          {ev?.category ? ` · ${formatWhatsappCategory(ev.category)}` : ''}
+          {ev?.category ? ` · ${formatCategoryLabel(ev.category)}` : ''}
         </p>
       );
     }
@@ -695,7 +732,7 @@ export default function App() {
       ['Time', ev.time],
       ['Location', ev.location],
       ['Cost', ev.cost],
-      ['Category', formatWhatsappCategory(ev.category)],
+      ['Category', formatCategoryLabel(ev.category)],
     ].filter(([, value]) => value);
 
     return (
@@ -1109,6 +1146,28 @@ export default function App() {
             )}
           </div>
 
+          <div className="controls-row type-filter-row">
+            <div className="type-filter date-filter">
+              <span className="field-label field-label--inline">Type</span>
+              <div className="filter-segment filter-segment--compact" role="group" aria-label="Filter by type">
+                {typeFilters.map(({ id, label, icon, title }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`filter-segment-btn filter-segment-btn--compact${typeFilter === id ? ' filter-segment-btn--selected' : ''}`}
+                    aria-pressed={typeFilter === id}
+                    aria-label={title}
+                    title={title}
+                    onClick={() => setTypeFilter(id)}
+                  >
+                    <span aria-hidden>{icon}</span>{' '}
+                    <span className="filter-segment-btn-label">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {lastFetched && !loading && (
             <p className="meta">
               <time dateTime={(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched).toISOString()}>
@@ -1153,7 +1212,13 @@ export default function App() {
             </div>
           )}
 
-          {lastFetched && dateEvents.length > 0 && filteredEvents.length === 0 && !loading && (
+          {lastFetched && dateEvents.length > 0 && typeEvents.length === 0 && !loading && (
+            <div className="empty-state">
+              <p>No events match the selected type.</p>
+            </div>
+          )}
+
+          {lastFetched && typeEvents.length > 0 && filteredEvents.length === 0 && !loading && (
             <div className="empty-state">
               <p>
                 {sourceFilteredEvents.length === 0
@@ -1175,6 +1240,7 @@ export default function App() {
                     <th>Time</th>
                     <th>Price</th>
                     <th>Location</th>
+                    <th className="category-col" aria-label="Type" />
                     <th>Event</th>
                   </tr>
                 </thead>
@@ -1210,6 +1276,9 @@ export default function App() {
                           <span className="site-icon-badge" aria-hidden>💬</span>
                         )}
                         <span>{e.location || e.source}</span>
+                      </td>
+                      <td className="category-cell" title={formatCategoryLabel(e.category)}>
+                        <span aria-hidden>{categoryIcon(e.category)}</span>
                       </td>
                       <td className="name-cell">
                         <div className="event-row-actions">
