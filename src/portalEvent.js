@@ -50,7 +50,7 @@ export function toPortalEventFromSite(e) {
     time: e.time ?? '',
     location: e.location ?? e.siteLocation ?? null,
     cost: e.priceText,
-    category: 'other',
+    category: 'music',
     reference: e.url,
     referenceType: 'url',
   };

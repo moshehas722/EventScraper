@@ -112,10 +112,16 @@ function formatSite(venue) {
 }
 
 // The per-event venue is the specific hall (Muzi aggregates many venues in the
-// Center region), so that hall — not the "Muzi (Center)" brand — is the location.
+// Center region), so that hall — not the "Muzi (Center)" brand — is the
+// location. Derived from the last parenthesis of the site string, e.g.
+// "Muzi (Center) (רידינג3)" -> "רידینג3".
 function formatLocation(venue) {
-  const hall = decodeHtml(venue).trim();
-  return hall || meta.location;
+  return lastParenthetical(formatSite(venue)) || meta.location;
+}
+
+function lastParenthetical(text) {
+  const matches = [...String(text ?? '').matchAll(/\(([^()]+)\)/g)];
+  return matches.length ? matches[matches.length - 1][1].trim() : String(text ?? '').trim();
 }
 
 function formatPrice(raw) {
