@@ -234,8 +234,8 @@ export default function App() {
   const [collapsedGroups, setCollapsedGroups] = useState(
     () => initialUi?.collapsedGroups ?? new Set(),
   );
-  const [sourcesPanelCollapsed, setSourcesPanelCollapsed] = useState(
-    () => initialUi?.sourcesPanelCollapsed ?? true,
+  const [sourcesMenuOpen, setSourcesMenuOpen] = useState(
+    () => initialUi?.sourcesMenuOpen ?? false,
   );
   const [dismissedUpcomingBannerKey, setDismissedUpcomingBannerKey] = useState(
     /** @type {string | null} */ (null),
@@ -280,9 +280,9 @@ export default function App() {
       knownSources,
       multiSelect,
       collapsedGroups,
-      sourcesPanelCollapsed,
+      sourcesMenuOpen,
     });
-  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesPanelCollapsed]);
+  }, [events, selectedSources, multiSelect, collapsedGroups, sourcesMenuOpen]);
 
   // Guards toggleFavorite against running before the initial GET resolves —
   // otherwise a click that races the load would save based on a stale
@@ -434,6 +434,23 @@ export default function App() {
     () => buildOriginSourceTree(sources, siteMeta, whatsappSources),
     [sources, siteMeta, whatsappSources],
   );
+  // One icon per venue group, plus a single combined icon for all of WhatsApp
+  // (however many individual senders it has) — feeds the "Where" icon bar.
+  const whereFilters = useMemo(() => {
+    const siteGroup = originSourceTree.find((g) => g.key === 'origin:site');
+    const waGroup = originSourceTree.find((g) => g.key === 'origin:whatsapp');
+    const items = siteGroup ? [...siteGroup.children] : [];
+    if (waGroup) {
+      items.push({
+        key: waGroup.key,
+        label: waGroup.label,
+        sources: waGroup.sources,
+        origin: null,
+        isWhatsapp: true,
+      });
+    }
+    return items;
+  }, [originSourceTree]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
   const sortedFavorites = useMemo(() => {
@@ -471,8 +488,7 @@ export default function App() {
       const allSelected = names.every((n) => prev.has(n));
 
       if (!multiSelect) {
-        if (allSelected) return new Set();
-        return new Set([names[0]]);
+        return allSelected ? new Set() : new Set(names);
       }
 
       const next = new Set(prev);
@@ -480,6 +496,26 @@ export default function App() {
       else names.forEach((n) => next.add(n));
       return next;
     });
+  };
+
+  // Shared by the sources menu's "Multiple selection" checkbox and the Where
+  // icon bar's multi-select toggle button — both control the same mode.
+  const setMultiSelectMode = (on) => {
+    setMultiSelect(on);
+    if (!on) {
+      setSelectedSources((prev) => {
+        if (prev.size <= 1) return prev;
+        multiSelectionBackupRef.current = prev;
+        const first = sources.find((s) => prev.has(s));
+        return first ? new Set([first]) : new Set();
+      });
+    } else if (multiSelectionBackupRef.current) {
+      const restored = new Set(
+        [...multiSelectionBackupRef.current].filter((s) => sources.includes(s)),
+      );
+      multiSelectionBackupRef.current = null;
+      if (restored.size > 0) setSelectedSources(restored);
+    }
   };
 
   const toggleGroupCollapsed = (key) => {
@@ -753,6 +789,24 @@ export default function App() {
         <div className="header-inner">
           <h1>What's Happening...</h1>
           <div className="header-actions">
+            {sources.length > 0 && (
+              <button
+                type="button"
+                className="sources-menu-toggle"
+                aria-pressed={sourcesMenuOpen}
+                aria-expanded={sourcesMenuOpen}
+                aria-label={`Sources, ${selectedSources.size} of ${sources.length} selected`}
+                onClick={() => setSourcesMenuOpen((v) => !v)}
+              >
+                <span className="sources-menu-toggle-icon" aria-hidden>
+                  🧭
+                </span>
+                <span className="sources-menu-toggle-text">Sources</span>
+                <span className="sources-menu-count">
+                  {selectedSources.size}/{sources.length}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               className="whatsapp-toggle"
@@ -864,6 +918,45 @@ export default function App() {
                 </li>
               ),
             )}
+          </ul>
+        </div>
+      )}
+
+      {sourcesMenuOpen && sources.length > 0 && (
+        <div className="sources-menu-panel" role="dialog" aria-label="Sources">
+          <div className="sources-menu-panel-header">
+            <h2>Sources</h2>
+            <button
+              type="button"
+              className="sources-menu-panel-close"
+              aria-label="Close sources menu"
+              onClick={() => setSourcesMenuOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="source-options">
+            <div className="source-bulk-actions">
+              <button type="button" className="link-btn" onClick={selectAllSources}>
+                Select all
+              </button>
+              <span className="source-bulk-sep" aria-hidden>·</span>
+              <button type="button" className="link-btn" onClick={selectNoneSources}>
+                Select none
+              </button>
+            </div>
+            <label className="source-multi-toggle">
+              <input
+                type="checkbox"
+                checked={multiSelect}
+                onChange={(e) => setMultiSelectMode(e.target.checked)}
+              />
+              Multiple selection
+            </label>
+          </div>
+          <ul className="source-list" role="group" aria-label="Filter by source">
+            {originSourceTree.map((originGroup) => renderOriginGroup(originGroup))}
           </ul>
         </div>
       )}
@@ -1018,75 +1111,53 @@ export default function App() {
       )}
 
       <div className="app-body">
-        {lastFetched && sources.length > 0 && (
-          <aside
-            className={`sources-sidebar card${sourcesPanelCollapsed ? ' sources-sidebar--collapsed' : ''}`}
-          >
-            <button
-              type="button"
-              className="sources-sidebar-toggle"
-              aria-expanded={!sourcesPanelCollapsed}
-              aria-controls="sources-panel-body"
-              aria-label={`Sources, ${selectedSources.size} of ${sources.length} selected`}
-              onClick={() => setSourcesPanelCollapsed((v) => !v)}
-            >
-              <span className="sources-sidebar-label">Sources</span>
-              <span className="sources-sidebar-summary">
-                {selectedSources.size}/{sources.length}
-              </span>
-              <span
-                className={`source-group-chevron${sourcesPanelCollapsed ? ' source-group-chevron--collapsed' : ''}`}
-                aria-hidden
-              >
-                ▾
-              </span>
-            </button>
-            <div id="sources-panel-body" className="sources-sidebar-body">
-            <div className="source-options">
-              <div className="source-bulk-actions">
-                <button type="button" className="link-btn" onClick={selectAllSources}>
-                  Select all
-                </button>
-                <span className="source-bulk-sep" aria-hidden>·</span>
-                <button type="button" className="link-btn" onClick={selectNoneSources}>
-                  Select none
-                </button>
-              </div>
-              <label className="source-multi-toggle">
-                <input
-                  type="checkbox"
-                  checked={multiSelect}
-                  onChange={(e) => {
-                    const on = e.target.checked;
-                    setMultiSelect(on);
-                    if (!on) {
-                      setSelectedSources((prev) => {
-                        if (prev.size <= 1) return prev;
-                        multiSelectionBackupRef.current = prev;
-                        const first = sources.find((s) => prev.has(s));
-                        return first ? new Set([first]) : new Set();
-                      });
-                    } else if (multiSelectionBackupRef.current) {
-                      const restored = new Set(
-                        [...multiSelectionBackupRef.current].filter((s) => sources.includes(s)),
-                      );
-                      multiSelectionBackupRef.current = null;
-                      if (restored.size > 0) setSelectedSources(restored);
-                    }
-                  }}
-                />
-                Multiple selection
-              </label>
-            </div>
-            <ul className="source-list" role="group" aria-label="Filter by source">
-              {originSourceTree.map((originGroup) => renderOriginGroup(originGroup))}
-            </ul>
-            </div>
-          </aside>
-        )}
-
         <main className="main">
         <section className="controls card">
+          {whereFilters.length > 0 && (
+            <div className="controls-row where-filter-row">
+              <div className="where-filter date-filter">
+                <span className="field-label field-label--inline">Where</span>
+                <div className="filter-segment filter-segment--compact where-icon-row" role="group" aria-label="Filter by source">
+                  {whereFilters.map((item) => {
+                    const allSelected = item.sources.every((s) => selectedSources.has(s));
+                    const icon = item.isWhatsapp
+                      ? null
+                      : faviconUrl(item.origin ?? resolveSiteOrigin(item.label, siteMeta));
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`filter-segment-btn filter-segment-btn--compact where-icon-btn${allSelected ? ' filter-segment-btn--selected' : ''}`}
+                        aria-pressed={allSelected}
+                        aria-label={item.label}
+                        title={item.label}
+                        onClick={() => toggleGroup(item)}
+                      >
+                        {icon ? (
+                          <img src={icon} alt="" className="site-icon" width={18} height={18} loading="lazy" />
+                        ) : (
+                          <span className="site-icon-badge" aria-hidden>
+                            {item.isWhatsapp ? '💬' : '📍'}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className={`multi-select-toggle${multiSelect ? ' multi-select-toggle--active' : ''}`}
+                  aria-pressed={multiSelect}
+                  aria-label={multiSelect ? 'Disable multiple selection' : 'Enable multiple selection'}
+                  title="Multiple selection"
+                  onClick={() => setMultiSelectMode(!multiSelect)}
+                >
+                  Multi
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="controls-row">
             <div className="date-filter">
               <span className="field-label field-label--inline">When</span>
