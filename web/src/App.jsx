@@ -269,8 +269,10 @@ export default function App() {
   // restores it, instead of being stuck with whatever single item was left.
   const multiSelectionBackupRef = useRef(/** @type {Set<string> | null} */ (null));
 
+  // Site metadata powers the Where bar's per-venue icon grouping (see
+  // sourceGroups.js) — needed in both live-scrape and Blob-only (Vercel)
+  // deployments, so this must NOT be gated by liveScrapeEnabled.
   useEffect(() => {
-    if (!liveScrapeEnabled) return;
     fetch('/api/sites')
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setSiteMeta(Array.isArray(data) ? data : []))
