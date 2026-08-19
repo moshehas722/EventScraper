@@ -1,0 +1,17 @@
+name: Daily scrape
+
+on:
+  schedule:
+    # 08:00 Asia/Jerusalem. GitHub Actions cron is UTC-only and doesn't
+    # follow DST, so this needs a manual flip twice a year:
+    #   IDT (UTC+3, roughly late Mar-late Oct): '0 5 * * *'
+    #   IST (UTC+2, roughly late Oct-late Mar):  '0 6 * * *'
+    - cron: '0 5 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: self-hosted
+    steps:
+      - name: Trigger scrape and Blob upload
+        run: docker exec eventscraper-scraper node src/site_scraper/index.js --all --vercel --quiet
