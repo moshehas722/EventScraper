@@ -1151,6 +1151,16 @@ export default function App() {
                 </div>
                 <button
                   type="button"
+                  className="multi-select-toggle"
+                  aria-label="Select all sources"
+                  title="Select all sources"
+                  disabled={!sourceFilterActive}
+                  onClick={selectAllSources}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
                   className={`multi-select-toggle${multiSelect ? ' multi-select-toggle--active' : ''}`}
                   aria-pressed={multiSelect}
                   aria-label={multiSelect ? 'Disable multiple selection' : 'Enable multiple selection'}

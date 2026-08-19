@@ -1198,9 +1198,14 @@
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.multi-select-toggle:hover {
+.multi-select-toggle:hover:not(:disabled) {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+.multi-select-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .multi-select-toggle--active {
