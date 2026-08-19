@@ -17,6 +17,7 @@ const API_URL = `${ORIGIN}/api/shows`;
 export const meta = {
   id: 'shablul',
   name: 'Shablul (Tel Aviv)',
+  location: 'Shablul, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

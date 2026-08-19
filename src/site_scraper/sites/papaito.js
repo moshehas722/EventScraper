@@ -20,6 +20,7 @@ const FETCH_OPTS = { insecureTls: true };
 export const meta = {
   id: 'papaito',
   name: 'Papaito',
+  location: 'Papaito',
   currency: '₪',
   origin: ORIGIN,
 };

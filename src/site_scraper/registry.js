@@ -16,7 +16,7 @@ import * as zappa from './sites/zappa.js';
 import * as greenbear from './sites/greenbear.js';
 import * as bargiyora from './sites/bargiyora.js';
 import * as muzicenter from './sites/muzicenter.js';
-import { toPortalEventFromSite } from './portalEvent.js';
+import { toPortalEventFromSite } from '../portalEvent.js';
 
 export const SITES = [barby, ozen, hameretz2, levontin7, haezor, babebar, papaito, shablul, grayyehud, graymodiin, graytelaviv, teder, zappa, greenbear, bargiyora, muzicenter];
 

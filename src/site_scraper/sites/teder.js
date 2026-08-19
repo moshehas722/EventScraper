@@ -20,6 +20,7 @@ const EVENT_RE =
 export const meta = {
   id: 'teder',
   name: 'Teder (Tel Aviv)',
+  location: 'Teder, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

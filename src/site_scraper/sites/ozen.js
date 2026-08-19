@@ -20,6 +20,7 @@ const PRODUCTS_URL = `${ORIGIN}/wp-json/wc/store/v1/products?per_page=100`;
 export const meta = {
   id: 'ozen',
   name: 'Ozen (Tel Aviv)',
+  location: 'Ozen, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

@@ -26,6 +26,7 @@ const EVENT_BLOCK_RE =
 export const meta = {
   id: 'muzicenter',
   name: 'Muzi (Center)',
+  location: 'Muzi (Center)',
   currency: '₪',
   origin: ORIGIN,
 };
@@ -92,6 +93,7 @@ function parseListingHtml(html, today) {
 
       events.push({
         site: formatSite(venue),
+        location: formatLocation(venue),
         name,
         date,
         time,
@@ -107,6 +109,13 @@ function parseListingHtml(html, today) {
 function formatSite(venue) {
   const hall = decodeHtml(venue).trim();
   return hall ? `${meta.name} (${hall})` : meta.name;
+}
+
+// The per-event venue is the specific hall (Muzi aggregates many venues in the
+// Center region), so that hall — not the "Muzi (Center)" brand — is the location.
+function formatLocation(venue) {
+  const hall = decodeHtml(venue).trim();
+  return hall || meta.location;
 }
 
 function formatPrice(raw) {

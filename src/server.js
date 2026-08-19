@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scrapeEvents, todayIso, SITES } from './registry.js';
+import { scrapeEvents, todayIso, SITES } from './site_scraper/registry.js';
 import {
   downloadEventsFromBlob,
   downloadFavoritesFromBlob,

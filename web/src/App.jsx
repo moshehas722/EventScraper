@@ -1072,7 +1072,7 @@ export default function App() {
                     {showDateColumn && <th>Day</th>}
                     <th>Time</th>
                     <th>Price</th>
-                    <th>Source</th>
+                    <th>Location</th>
                     <th>Event</th>
                   </tr>
                 </thead>
@@ -1107,7 +1107,7 @@ export default function App() {
                         {!siteIcon && e.origin === 'whatsapp' && (
                           <span className="site-icon-badge" aria-hidden>💬</span>
                         )}
-                        <span>{e.source}</span>
+                        <span>{e.location || e.source}</span>
                       </td>
                       <td className="name-cell">
                         <div className="event-row-actions">

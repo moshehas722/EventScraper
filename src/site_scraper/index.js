@@ -2,7 +2,7 @@
 // Event scraper CLI.
 //
 // Usage:
-//   node src/index.js [YYYY-MM-DD] [--all] [--json] [--vercel]
+//   node src/site_scraper/index.js [YYYY-MM-DD] [--all] [--json] [--vercel]
 //
 //   (no date)        list events for today
 //   YYYY-MM-DD       list events for that specific day
@@ -10,12 +10,12 @@
 //   --json           output raw JSON instead of a formatted table
 //   --vercel         also upload the events JSON to Vercel Blob
 //
-// Add more sites by dropping a module in src/sites/ that exports
-// { meta, fetchEvents } and registering it in src/registry.js.
+// Add more sites by dropping a module in src/site_scraper/sites/ that exports
+// { meta, fetchEvents } and registering it in src/site_scraper/registry.js.
 
 import { scrapeEvents, todayIso } from './registry.js';
 import { setProgressQuiet } from './progress.js';
-import { uploadEventsToBlob } from './blob.js';
+import { uploadEventsToBlob } from '../blob.js';
 
 function parseArgs(argv) {
   const opts = { date: todayIso(), all: false, json: false, quiet: false, vercel: false };
@@ -35,7 +35,7 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
     console.log(
-      'Usage: node src/index.js [YYYY-MM-DD] [--all] [--json] [--vercel]\n' +
+      'Usage: node src/site_scraper/index.js [YYYY-MM-DD] [--all] [--json] [--vercel]\n' +
         '  (no date)   events for today\n' +
         '  YYYY-MM-DD  events for that day\n' +
         '  --all       every upcoming event\n' +

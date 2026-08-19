@@ -24,6 +24,7 @@ const LOAD_MORE = 6;
 export const meta = {
   id: 'graytelaviv',
   name: 'Gray Club (Tel Aviv)',
+  location: 'Gray Club, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

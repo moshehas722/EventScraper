@@ -20,6 +20,7 @@ const FETCH_OPTS = { insecureTls: true };
 export const meta = {
   id: 'babebar',
   name: 'Babe Bar (Hod Hasharon)',
+  location: 'Babe Bar, Hod Hasharon',
   currency: '₪',
   origin: ORIGIN,
 };

@@ -13,7 +13,7 @@ Probe script template — save as `scraper-temp/probe-example.mjs` (delete
 `scraper-temp/` when done):
 
 ```js
-import { fetchJson } from '../src/http.js';
+import { fetchJson } from '../src/site_scraper/http.js';
 
 const ORIGIN = 'https://example.com';
 const headers = { Referer: `${ORIGIN}/`, Origin: ORIGIN };
@@ -274,16 +274,16 @@ Paginate while `<link rel="next">` is present; stop on empty page. Region term
 
 ## HTTP helper
 
-`src/http.js` → `fetchJson(url, { Referer, Origin })` sends browser-like headers.
+`src/site_scraper/http.js` → `fetchJson(url, { Referer, Origin })` sends browser-like headers.
 Required for Cloudflare-protected sites. Throws on non-2xx.
 
 ## Shared infrastructure (do not reimplement)
 
 | File | Role |
 |------|------|
-| `src/http.js` | JSON fetch with browser headers |
-| `src/progress.js` | `noopProgress`, `createProgress`, `fetchAllSites` |
-| `src/index.js` | CLI, day filter, merge, table output |
+| `src/site_scraper/http.js` | JSON fetch with browser headers |
+| `src/site_scraper/progress.js` | `noopProgress`, `createProgress`, `fetchAllSites` |
+| `src/site_scraper/index.js` | CLI, day filter, merge, table output |
 
 Progress goes to **stderr**; table/JSON to **stdout**.
 

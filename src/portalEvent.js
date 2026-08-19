@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
  * Deterministic id for an event, stable across re-scrapes/re-extractions of
  * the same event. Delimited (not naive concatenation) to avoid field-boundary
  * collisions; includes `time` so two same-day/same-reference events at
- * different times don't collide (see src/sites/muzicenter.js for a case
+ * different times don't collide (see src/site_scraper/sites/muzicenter.js for a case
  * where that already happens for site-scraped events).
  *
  * Must stay byte-identical to the duplicate copy in web/api/favorites.js
@@ -31,8 +31,13 @@ export function computeEventId({ source, reference, date, time }) {
 
 /**
  * Maps a site-scraped event ({ site, name, date, time, priceText, url,
- * siteOrigin }) into a Portal Event.
- * @param {{ site: string, name: string, date: string, time: string, priceText: string, url: string, siteOrigin?: string }} e
+ * siteOrigin, siteLocation, location }) into a Portal Event.
+ *
+ * `location` is the venue name (+ city), e.g. "Barby, Tel Aviv". A per-event
+ * `location` (set by aggregator scrapers like Zappa/Muzi whose venue varies
+ * per event) wins over the venue-wide `siteLocation` default that
+ * fetchSite() attaches from the site's meta.
+ * @param {{ site: string, name: string, date: string, time: string, priceText: string, url: string, siteOrigin?: string, siteLocation?: string, location?: string }} e
  */
 export function toPortalEventFromSite(e) {
   return {
@@ -43,7 +48,7 @@ export function toPortalEventFromSite(e) {
     name: e.name,
     date: e.date,
     time: e.time ?? '',
-    location: null,
+    location: e.location ?? e.siteLocation ?? null,
     cost: e.priceText,
     category: 'other',
     reference: e.url,

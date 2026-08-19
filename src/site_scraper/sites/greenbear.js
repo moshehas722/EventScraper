@@ -17,6 +17,7 @@ const SCHEDULE_URL = `${ORIGIN}/`;
 export const meta = {
   id: 'greenbear',
   name: 'Green Bear (Hod Hasharon)',
+  location: 'Green Bear, Hod Hasharon',
   currency: '₪',
   origin: 'https://www.greenbear-club.com',
 };

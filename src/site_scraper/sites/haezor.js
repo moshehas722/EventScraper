@@ -16,6 +16,7 @@ const SCHEDULE_URL = `${ORIGIN}/%d7%9c%d7%95%d7%97-%d7%94%d7%95%d7%a4%d7%a2%d7%9
 export const meta = {
   id: 'haezor',
   name: 'HaZor (Tel Aviv)',
+  location: 'HaZor, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

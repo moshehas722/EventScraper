@@ -24,6 +24,7 @@ const ITEM_RE =
 export const meta = {
   id: 'bargiyora',
   name: 'Bar Giyora (Tel Aviv)',
+  location: 'Bar Giyora, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

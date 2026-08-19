@@ -22,10 +22,10 @@ Copy this checklist and track progress:
 ```
 - [ ] 1. Discover API endpoint(s)
 - [ ] 2. Probe response shape (dates, prices, URLs)
-- [ ] 3. Create src/sites/<id>.js
-- [ ] 4. Register in src/registry.js SITES array
+- [ ] 3. Create src/site_scraper/sites/<id>.js
+- [ ] 4. Register in src/site_scraper/registry.js SITES array
 - [ ] 5. Update README supported venues table
-- [ ] 6. Verify: node src/index.js <today> and node src/index.js --all --quiet
+- [ ] 6. Verify: node src/site_scraper/index.js <today> and node src/site_scraper/index.js --all --quiet
 - [ ] 7. Delete `scraper-temp/` contents (or the whole folder) when done
 ```
 
@@ -37,7 +37,7 @@ Copy this checklist and track progress:
    - `<link rel="https://api.w.org/">` → try `{origin}/wp-json/`
 3. Create `scraper-temp/` if needed. Write all discovery artifacts there —
    probe scripts (`scraper-temp/probe-*.mjs`), downloaded HTML, etc. Use
-   `fetchJson` from `src/http.js` in probe scripts (always pass `Referer` +
+   `fetchJson` from `src/site_scraper/http.js` in probe scripts (always pass `Referer` +
    `Origin`).
 4. List routes: `GET {origin}/wp-json/` → inspect `routes` keys.
 
@@ -75,7 +75,7 @@ literal `YYYY-MM-DD` and `HH:mm` prefix if that matches what the site displays.
 
 ## Step 3 — Site module template
 
-Create `src/sites/<id>.js`:
+Create `src/site_scraper/sites/<id>.js`:
 
 ```js
 // Site scraper for example.com (Venue Name).
@@ -92,6 +92,7 @@ const API_URL = `${ORIGIN}/api/events`;
 export const meta = {
   id: 'example',
   name: 'Venue Name (City)',
+  location: 'Venue Name, City', // venue + city; attached to every event automatically
   currency: '₪',
 };
 
@@ -119,12 +120,16 @@ export async function fetchEvents(progress = noopProgress) {
 Conventions:
 - Import `fetchJson` from `../http.js` (browser-like headers for Cloudflare).
 - Accept `progress = noopProgress`; log each HTTP step via `progress.log()`.
+- Set `meta.location` (venue + city). `fetchAllSites()` attaches it to every event
+  as the Portal Event `location`. If the scraper aggregates multiple venues whose
+  location varies per event, set a per-event `location` field instead — it overrides
+  the meta default.
 - Keep venue-specific helpers private in the same file.
 - Match comment/doc style of existing modules (`barby.js`, `ozen.js`, `hameretz2.js`).
 
 ## Step 4 — Register
 
-In `src/registry.js`:
+In `src/site_scraper/registry.js`:
 
 ```js
 import * as example from './sites/example.js';
@@ -132,15 +137,15 @@ const SITES = [barby, ozen, hameretz2, levontin7, example];
 ```
 
 Orchestration (concurrent fetch, progress, failure isolation) is already handled
-by `fetchAllSites()` in `src/progress.js` — do not duplicate it in site modules.
+by `fetchAllSites()` in `src/site_scraper/progress.js` — do not duplicate it in site modules.
 
 ## Step 5 — Verify
 
 ```bash
-node src/index.js                  # today
-node src/index.js 2026-08-12       # specific day
-node src/index.js --all --quiet    # full merge, no progress noise
-node src/index.js --all --json     # stdout JSON only; progress on stderr
+node src/site_scraper/index.js                  # today
+node src/site_scraper/index.js 2026-08-12       # specific day
+node src/site_scraper/index.js --all --quiet    # full merge, no progress noise
+node src/site_scraper/index.js --all --json     # stdout JSON only; progress on stderr
 ```
 
 Confirm: event count is plausible, names/dates/times match the live site, prices

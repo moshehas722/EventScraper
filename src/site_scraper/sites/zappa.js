@@ -32,6 +32,7 @@ const VENUE_LABELS = {
 export const meta = {
   id: 'zappa',
   name: 'Zappa Club',
+  location: 'Zappa Club',
   currency: '₪',
   origin: ORIGIN,
 };
@@ -68,6 +69,7 @@ export async function fetchEvents(progress = noopProgress) {
 
       events.push({
         site: formatSite(venue),
+        location: formatLocation(venue),
         name: String(product.name ?? '').trim(),
         date,
         time,
@@ -94,10 +96,18 @@ async function fetchProductPage(page, headers, tls) {
   return fetchJson(`${API_URL}?${params}`, headers, tls);
 }
 
-function formatSite(venue) {
+function venueLabel(venue) {
   const trimmed = venue.replace(/^זאפה\s*/, '').trim();
-  const label = VENUE_LABELS[venue] ?? (trimmed || venue);
-  return `${meta.name} (${label})`;
+  return VENUE_LABELS[venue] ?? (trimmed || venue);
+}
+
+function formatSite(venue) {
+  return `${meta.name} (${venueLabel(venue)})`;
+}
+
+function formatLocation(venue) {
+  const label = venueLabel(venue);
+  return label ? `${meta.name}, ${label}` : meta.location;
 }
 
 function splitStartDate(startDate) {

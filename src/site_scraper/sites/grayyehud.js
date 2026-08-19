@@ -24,6 +24,7 @@ const LOAD_MORE = 6;
 export const meta = {
   id: 'grayyehud',
   name: 'Gray Club (Yehud)',
+  location: 'Gray Club, Yehud',
   currency: '₪',
   origin: ORIGIN,
 };

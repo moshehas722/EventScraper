@@ -16,6 +16,7 @@ const API_URL = `${ORIGIN}/wp-json/hm2/v1/events`;
 export const meta = {
   id: 'hameretz2',
   name: 'Hameretz 2 (Tel Aviv)',
+  location: 'Hameretz 2, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

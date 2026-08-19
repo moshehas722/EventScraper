@@ -17,6 +17,7 @@ const ORIGIN = 'https://barby.co.il';
 export const meta = {
   id: 'barby',
   name: 'Barby (Tel Aviv)',
+  location: 'Barby, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

@@ -2,7 +2,7 @@
 // Messages go to stderr so stdout stays clean for tables and --json.
 
 /** @typedef {{ log: (message: string) => void }} Progress */
-/** @typedef {{ meta: { name: string }, fetchEvents: (progress?: Progress) => Promise<Array<object>> }} SiteModule */
+/** @typedef {{ meta: { name: string, origin?: string, location?: string }, fetchEvents: (progress?: Progress) => Promise<Array<object>> }} SiteModule */
 
 export const noopProgress = { log() {} };
 
@@ -55,5 +55,12 @@ async function fetchSite(site) {
   const events = await site.fetchEvents(progress);
   progress.log(`done (${events.length} events)`);
   const origin = site.meta.origin ?? null;
-  return origin ? events.map((e) => ({ ...e, siteOrigin: origin })) : events;
+  const location = site.meta.location ?? null;
+  // Attach venue-wide defaults from meta. A per-event value set by the scraper
+  // (e.g. Zappa/Muzi, whose venue varies per event) is preserved and wins.
+  return events.map((e) => ({
+    ...e,
+    siteOrigin: e.siteOrigin ?? origin,
+    siteLocation: e.siteLocation ?? location,
+  }));
 }

@@ -59,12 +59,12 @@ The core then filters by day, merges all venues, sorts, and prints.
 Requires Node.js 20+ (no dependencies to install).
 
 ```bash
-node src/index.js                 # events today
-node src/index.js 2026-08-21      # events on a specific day (YYYY-MM-DD)
-node src/index.js --all           # every upcoming event across all venues
-node src/index.js --all --json    # machine-readable JSON output
-node src/index.js --quiet         # suppress progress on stderr
-node src/index.js --help
+node src/site_scraper/index.js                 # events today
+node src/site_scraper/index.js 2026-08-21      # events on a specific day (YYYY-MM-DD)
+node src/site_scraper/index.js --all           # every upcoming event across all venues
+node src/site_scraper/index.js --all --json    # machine-readable JSON output
+node src/site_scraper/index.js --quiet         # suppress progress on stderr
+node src/site_scraper/index.js --help
 ```
 
 Example:
@@ -87,27 +87,35 @@ EventScraper/
   README.md
   package.json
   src/
-    index.js         CLI: arg parsing, day filter, multi-site merge, output
-    registry.js      registered venue scrapers (SITES array)
-    http.js          shared fetch helper (browser-like headers)
-    progress.js      shared progress logging (stderr)
-    sites/
-      barby.js       Barby-specific fetch + normalize
-      ozen.js        Ozen-specific fetch + normalize
-      hameretz2.js   Hameretz 2-specific fetch + normalize
-      levontin7.js   Levontin 7-specific fetch + normalize
-      haezor.js      HaZor-specific fetch + normalize
-      babebar.js     Babe Bar-specific fetch + normalize
-      papaito.js     Papaito-specific fetch + normalize
-      shablul.js     Shablul-specific fetch + normalize
-      teder.js       Teder-specific fetch + normalize
-      grayyehud.js   Gray Club Yehud-specific fetch + normalize
-      graymodiin.js  Gray Club Modiin-specific fetch + normalize
-      graytelaviv.js Gray Club Tel Aviv-specific fetch + normalize
-      zappa.js       Zappa Club-specific fetch + normalize
-      greenbear.js   Green Bear-specific fetch + normalize
-      bargiyora.js   Bar Giyora-specific fetch + normalize
-      muzicenter.js  Muzi Center-region fetch + normalize
+    server.js        HTTP API (serves both site + WhatsApp events to the web UI)
+    portalEvent.js   common Portal Event model shared by all origins
+    blob.js          shared Vercel Blob helpers (events, favorites, blacklist)
+    site_scraper/
+      index.js         CLI: arg parsing, day filter, multi-site merge, output
+      registry.js      registered venue scrapers (SITES array)
+      http.js          shared fetch helper (browser-like headers)
+      progress.js      shared progress logging (stderr)
+      sites/
+        barby.js       Barby-specific fetch + normalize
+        ozen.js        Ozen-specific fetch + normalize
+        hameretz2.js   Hameretz 2-specific fetch + normalize
+        levontin7.js   Levontin 7-specific fetch + normalize
+        haezor.js      HaZor-specific fetch + normalize
+        babebar.js     Babe Bar-specific fetch + normalize
+        papaito.js     Papaito-specific fetch + normalize
+        shablul.js     Shablul-specific fetch + normalize
+        teder.js       Teder-specific fetch + normalize
+        grayyehud.js   Gray Club Yehud-specific fetch + normalize
+        graymodiin.js  Gray Club Modiin-specific fetch + normalize
+        graytelaviv.js Gray Club Tel Aviv-specific fetch + normalize
+        zappa.js       Zappa Club-specific fetch + normalize
+        greenbear.js   Green Bear-specific fetch + normalize
+        bargiyora.js   Bar Giyora-specific fetch + normalize
+        muzicenter.js  Muzi Center-region fetch + normalize
+    whatsapp_plugin/
+      index.js         WhatsApp agent plugin (stores messages + extracted events)
+      blob.js          WhatsApp Blob stores (messages, events, plugin secret)
+      llm.js           Gemini event extraction from message text
 ```
 
 Ozen uses three public REST endpoints: Tickera's event list
@@ -195,12 +203,15 @@ id. The site may require `insecureTls` on networks with TLS interception.
 
 ## Adding a venue
 
-1. Create `src/sites/<venue>.js` exporting:
-   - `meta` — `{ id, name, currency }`
+1. Create `src/site_scraper/sites/<venue>.js` exporting:
+   - `meta` — `{ id, name, location, currency, origin }`. `location` is the venue
+     name + city (e.g. `"Barby, Tel Aviv"`); it's attached to every event
+     automatically. Aggregator scrapers whose venue varies per event (Zappa, Muzi)
+     instead set a per-event `location` that overrides the meta default.
    - `fetchEvents(progress?)` — returns an array of the common event shape above, with
      `date` normalized to `YYYY-MM-DD`. Optional `progress` (from `progress.js`) logs
      step messages to stderr.
-2. Register it in the `SITES` array in `src/registry.js`.
+2. Register it in the `SITES` array in `src/site_scraper/registry.js`.
 
 Everything else — day filtering, merging, sorting, table/JSON output — works
 automatically. If a single site fails, the others still return; the failure is

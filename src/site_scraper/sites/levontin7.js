@@ -20,6 +20,7 @@ const MONTHS_AHEAD = 6;
 export const meta = {
   id: 'levontin7',
   name: 'Levontin 7 (Tel Aviv)',
+  location: 'Levontin 7, Tel Aviv',
   currency: '₪',
   origin: ORIGIN,
 };

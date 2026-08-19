@@ -24,6 +24,7 @@ const LOAD_MORE = 6;
 export const meta = {
   id: 'graymodiin',
   name: 'Gray Club (Modiin)',
+  location: 'Gray Club, Modiin',
   currency: '₪',
   origin: ORIGIN,
 };
