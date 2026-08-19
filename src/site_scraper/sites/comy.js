@@ -114,7 +114,7 @@ function formatSite(venue) {
 }
 
 function formatLocation(venue) {
-  return venue ? `${meta.name}, ${venue}` : meta.location;
+  return venue || meta.location;
 }
 
 /** @param {number | undefined} timestamp Unix seconds; UTC fields equal Israel wall-clock date/time. */
