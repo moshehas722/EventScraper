@@ -151,6 +151,46 @@ export function resolveGroupInfo(sourceName, siteMeta = [], allSourceNames) {
 }
 
 /**
+ * Top-level source tree: Sites (venue sub-groups) and WhatsApp (per sender).
+ * @param {string[]} sourceNames
+ * @param {Array<{ id: string, name: string, origin?: string }>} siteMeta
+ * @param {Set<string>} whatsappSources
+ */
+export function buildOriginSourceTree(sourceNames, siteMeta = [], whatsappSources = new Set()) {
+  const siteNames = sourceNames.filter((n) => !whatsappSources.has(n));
+  const waNames = sourceNames.filter((n) => whatsappSources.has(n));
+  /** @type {Array<{ key: string, label: string, sources: string[], children: Array<object> }>} */
+  const tree = [];
+
+  if (siteNames.length) {
+    tree.push({
+      key: 'origin:site',
+      label: 'Sites',
+      sources: siteNames,
+      children: buildSourceGroups(siteNames, siteMeta),
+    });
+  }
+
+  if (waNames.length) {
+    tree.push({
+      key: 'origin:whatsapp',
+      label: 'WhatsApp',
+      sources: waNames,
+      children: [...waNames]
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({
+          key: `wa:${name}`,
+          label: name,
+          origin: null,
+          sources: [name],
+        })),
+    });
+  }
+
+  return tree;
+}
+
+/**
  * @param {string[]} sourceNames
  * @param {Array<{ id: string, name: string, origin?: string }>} siteMeta
  */

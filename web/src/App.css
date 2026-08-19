@@ -302,6 +302,29 @@
   gap: 0.15rem;
 }
 
+.source-origin-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.source-origin-header .source-group-label {
+  font-weight: 700;
+}
+
+.source-origin-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.source-group--nested {
+  margin-left: 0.35rem;
+}
+
 .source-item--nested {
   font-size: 0.82rem;
   padding: 0.4rem 0.55rem;
@@ -840,6 +863,117 @@
   color: var(--text);
   word-break: break-word;
   white-space: pre-wrap;
+}
+
+.whatsapp-item-structured {
+  margin: 0.35rem 0 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.whatsapp-item-structured--none {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.whatsapp-structured-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.whatsapp-structured-row dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.whatsapp-structured-row dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.event-name-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-hover);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.event-name-link:hover {
+  color: var(--accent);
+}
+
+.message-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.message-modal {
+  width: min(36rem, 100%);
+  max-height: min(80vh, 32rem);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.message-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.message-modal-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.message-modal-close {
+  padding: 0.15rem 0.4rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.message-modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.message-modal-text {
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .favorite-btn {

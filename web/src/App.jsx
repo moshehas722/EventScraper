@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { faviconUrl, resolveSiteOrigin } from './siteOrigins.js';
 import {
-  buildSourceGroups,
+  buildOriginSourceTree,
   loadUiState,
   mergeSourceSelection,
   saveUiState,
@@ -74,6 +74,7 @@ function formatShortDateTime(d) {
 }
 
 function formatCompactScope(mode, selectedDate) {
+  if (mode === 'all') return 'All';
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return `${formatDayName(dayIso, 'short')}, ${formatMonthDay(dayIso)}`;
   if (mode === 'week') {
@@ -83,7 +84,7 @@ function formatCompactScope(mode, selectedDate) {
   return null;
 }
 
-/** @typedef {'today' | 'tomorrow' | `plus${number}` | 'week' | 'date'} DateFilterMode */
+/** @typedef {'today' | 'tomorrow' | `plus${number}` | 'week' | 'all' | 'date'} DateFilterMode */
 
 function dayOffsetFromMode(mode) {
   if (mode === 'today') return 0;
@@ -100,6 +101,7 @@ function getFilterDayIso(mode, selectedDate) {
 }
 
 function matchesDateFilter(eventDate, mode, selectedDate) {
+  if (mode === 'all') return true;
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return eventDate === dayIso;
   if (mode === 'week') {
@@ -110,6 +112,7 @@ function matchesDateFilter(eventDate, mode, selectedDate) {
 }
 
 function dateFilterLabel(mode, selectedDate) {
+  if (mode === 'all') return 'all upcoming events';
   const dayIso = getFilterDayIso(mode, selectedDate);
   if (dayIso) return formatDisplayDate(dayIso);
   const today = todayIso();
@@ -140,6 +143,12 @@ function buildDateFilters() {
     title: `${formatDisplayDate(today)} – ${formatDisplayDate(addDays(today, 6))}`,
   });
   filters.push({
+    id: 'all',
+    label: 'All',
+    compactLabel: 'All',
+    title: 'All upcoming events',
+  });
+  filters.push({
     id: 'date',
     label: 'Date',
     compactLabel: 'Cal',
@@ -147,6 +156,11 @@ function buildDateFilters() {
   });
 
   return filters;
+}
+
+function formatWhatsappCategory(category) {
+  if (!category || category === 'other') return 'Other';
+  return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 function GroupCheckbox({ checked, indeterminate, onChange, label }) {
@@ -208,6 +222,7 @@ export default function App() {
   const [whatsappMessages, setWhatsappMessages] = useState(/** @type {Array} */ ([]));
   const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [whatsappError, setWhatsappError] = useState(null);
+  const [waMessagePreview, setWaMessagePreview] = useState(/** @type {string | null} */ (null));
   // Guards against the initial (still-empty) render's state overwriting the
   // saved selection in localStorage before the auto-load-on-mount fetch resolves.
   const hydratedRef = useRef(false);
@@ -375,15 +390,15 @@ export default function App() {
   );
 
   const sources = [...new Set(events.map((e) => e.source))].sort((a, b) => a.localeCompare(b));
-  const sourceGroups = useMemo(
-    () => buildSourceGroups(sources, siteMeta),
-    [sources, siteMeta],
-  );
   // WhatsApp-origin sources have no favicon-able origin — shown with a badge
   // instead, wherever a favicon would otherwise be missing.
   const whatsappSources = useMemo(
     () => new Set(events.filter((e) => e.origin === 'whatsapp').map((e) => e.source)),
     [events],
+  );
+  const originSourceTree = useMemo(
+    () => buildOriginSourceTree(sources, siteMeta, whatsappSources),
+    [sources, siteMeta, whatsappSources],
   );
 
   const favoriteIds = useMemo(() => new Set(favorites.map((f) => f.id)), [favorites]);
@@ -455,7 +470,7 @@ export default function App() {
   const filteredEvents = sourceFilteredEvents.filter((e) => !isBlacklisted(e, blacklist));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
   const blacklistActive = sourceFilteredEvents.length > filteredEvents.length;
-  const showDateColumn = dateFilter === 'week';
+  const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
 
@@ -513,6 +528,7 @@ export default function App() {
   const renderSourceItem = (name, nested = false) => {
     const selected = selectedSources.has(name);
     const siteIcon = faviconUrl(resolveSiteOrigin(name, siteMeta));
+    const isWhatsapp = whatsappSources.has(name);
     return (
       <li key={name} className={nested ? 'source-group-item' : undefined}>
         <div className="source-item-row">
@@ -541,13 +557,156 @@ export default function App() {
                 loading="lazy"
               />
             )}
-            {!nested && !siteIcon && whatsappSources.has(name) && (
+            {!nested && !siteIcon && isWhatsapp && (
               <span className="site-icon-badge" aria-hidden>💬</span>
             )}
             <span className="source-item-name">{name}</span>
           </button>
         </div>
       </li>
+    );
+  };
+
+  const renderVenueGroupBlock = (group) => {
+    if (group.sources.length === 1) {
+      return renderSourceItem(group.sources[0], true);
+    }
+
+    const selectedCount = group.sources.filter((n) => selectedSources.has(n)).length;
+    const allSelected = selectedCount === group.sources.length;
+    const someSelected = selectedCount > 0 && !allSelected;
+    const collapsed = collapsedGroups.has(group.key);
+    const groupIcon = faviconUrl(group.origin ?? resolveSiteOrigin(group.label, siteMeta));
+
+    return (
+      <li key={group.key} className="source-group source-group--nested">
+        <div className="source-group-header">
+          {multiSelect && (
+            <GroupCheckbox
+              checked={allSelected}
+              indeterminate={someSelected}
+              label={`${allSelected ? 'Deselect' : 'Select'} all in ${group.label}`}
+              onChange={() => toggleGroup(group)}
+            />
+          )}
+          <button
+            type="button"
+            className="source-group-toggle"
+            aria-expanded={!collapsed}
+            onClick={() => toggleGroupCollapsed(group.key)}
+          >
+            <span
+              className={`source-group-chevron${collapsed ? ' source-group-chevron--collapsed' : ''}`}
+              aria-hidden
+            >
+              ▾
+            </span>
+            {groupIcon && (
+              <img
+                src={groupIcon}
+                alt=""
+                className="site-icon"
+                width={16}
+                height={16}
+                loading="lazy"
+              />
+            )}
+            <span className="source-group-label">{group.label}</span>
+            <span className="source-group-count">
+              {selectedCount}/{group.sources.length}
+            </span>
+          </button>
+        </div>
+        {!collapsed && (
+          <ul className="source-group-items" role="group" aria-label={group.label}>
+            {group.sources.map((name) => renderSourceItem(name, true))}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
+  const renderOriginGroup = (originGroup) => {
+    const selectedCount = originGroup.sources.filter((n) => selectedSources.has(n)).length;
+    const allSelected = selectedCount === originGroup.sources.length;
+    const someSelected = selectedCount > 0 && !allSelected;
+    const collapsed = collapsedGroups.has(originGroup.key);
+    const isWhatsapp = originGroup.key === 'origin:whatsapp';
+
+    return (
+      <li key={originGroup.key} className="source-origin-group">
+        <div className="source-group-header source-origin-header">
+          {multiSelect && (
+            <GroupCheckbox
+              checked={allSelected}
+              indeterminate={someSelected}
+              label={`${allSelected ? 'Deselect' : 'Select'} all in ${originGroup.label}`}
+              onChange={() => toggleGroup(originGroup)}
+            />
+          )}
+          <button
+            type="button"
+            className="source-group-toggle source-origin-toggle"
+            aria-expanded={!collapsed}
+            onClick={() => toggleGroupCollapsed(originGroup.key)}
+          >
+            <span
+              className={`source-group-chevron${collapsed ? ' source-group-chevron--collapsed' : ''}`}
+              aria-hidden
+            >
+              ▾
+            </span>
+            {isWhatsapp && <span className="site-icon-badge" aria-hidden>💬</span>}
+            <span className="source-group-label">{originGroup.label}</span>
+            <span className="source-group-count">
+              {selectedCount}/{originGroup.sources.length}
+            </span>
+          </button>
+        </div>
+        {!collapsed && (
+          <ul
+            className="source-origin-items"
+            role="group"
+            aria-label={originGroup.label}
+          >
+            {isWhatsapp
+              ? originGroup.children.map((child) => renderSourceItem(child.sources[0], true))
+              : originGroup.children.map((child) => renderVenueGroupBlock(child))}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
+  const renderWhatsappStructured = (message) => {
+    const ev = message.event;
+    if (!ev?.isEvent) {
+      return (
+        <p className="whatsapp-item-structured whatsapp-item-structured--none">
+          No event detected
+          {ev?.category ? ` · ${formatWhatsappCategory(ev.category)}` : ''}
+        </p>
+      );
+    }
+
+    const fields = [
+      ['Name', ev.name],
+      ['Date', ev.date],
+      ['Time', ev.time],
+      ['Location', ev.location],
+      ['Cost', ev.cost],
+      ['Category', formatWhatsappCategory(ev.category)],
+    ].filter(([, value]) => value);
+
+    return (
+      <dl className="whatsapp-item-structured">
+        {fields.map(([label, value]) => (
+          <div key={label} className="whatsapp-structured-row">
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
     );
   };
 
@@ -751,7 +910,7 @@ export default function App() {
                       </>
                     )}
                   </div>
-                  <p className="whatsapp-item-text">{m.text}</p>
+                  {renderWhatsappStructured(m)}
                 </li>
               ))}
             </ul>
@@ -882,65 +1041,8 @@ export default function App() {
                 Multiple selection
               </label>
             </div>
-            <ul className="source-list" role="group" aria-label="Filter by venue">
-              {sourceGroups.map((group) => {
-                if (group.sources.length === 1) {
-                  return renderSourceItem(group.sources[0]);
-                }
-
-                const selectedCount = group.sources.filter((n) => selectedSources.has(n)).length;
-                const allSelected = selectedCount === group.sources.length;
-                const someSelected = selectedCount > 0 && !allSelected;
-                const collapsed = collapsedGroups.has(group.key);
-                const groupIcon = faviconUrl(group.origin ?? resolveSiteOrigin(group.label, siteMeta));
-
-                return (
-                  <li key={group.key} className="source-group">
-                    <div className="source-group-header">
-                      {multiSelect && (
-                        <GroupCheckbox
-                          checked={allSelected}
-                          indeterminate={someSelected}
-                          label={`${allSelected ? 'Deselect' : 'Select'} all in ${group.label}`}
-                          onChange={() => toggleGroup(group)}
-                        />
-                      )}
-                      <button
-                        type="button"
-                        className="source-group-toggle"
-                        aria-expanded={!collapsed}
-                        onClick={() => toggleGroupCollapsed(group.key)}
-                      >
-                        <span
-                          className={`source-group-chevron${collapsed ? ' source-group-chevron--collapsed' : ''}`}
-                          aria-hidden
-                        >
-                          ▾
-                        </span>
-                        {groupIcon && (
-                          <img
-                            src={groupIcon}
-                            alt=""
-                            className="site-icon"
-                            width={16}
-                            height={16}
-                            loading="lazy"
-                          />
-                        )}
-                        <span className="source-group-label">{group.label}</span>
-                        <span className="source-group-count">
-                          {selectedCount}/{group.sources.length}
-                        </span>
-                      </button>
-                    </div>
-                    {!collapsed && (
-                      <ul className="source-group-items" role="group" aria-label={group.label}>
-                        {group.sources.map((name) => renderSourceItem(name, true))}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
+            <ul className="source-list" role="group" aria-label="Filter by source">
+              {originSourceTree.map((originGroup) => renderOriginGroup(originGroup))}
             </ul>
             </div>
           </aside>
@@ -1139,7 +1241,13 @@ export default function App() {
                               {displayName}
                             </a>
                           ) : (
-                            <span>{displayName}</span>
+                            <button
+                              type="button"
+                              className="event-name-link"
+                              onClick={() => setWaMessagePreview(e.reference)}
+                            >
+                              {displayName}
+                            </button>
                           )}
                         </div>
                       </td>
@@ -1153,6 +1261,34 @@ export default function App() {
         </section>
         </main>
       </div>
+
+      {waMessagePreview && (
+        <div
+          className="message-modal-overlay"
+          role="presentation"
+          onClick={() => setWaMessagePreview(null)}
+        >
+          <div
+            className="message-modal"
+            role="dialog"
+            aria-label="Original WhatsApp message"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="message-modal-header">
+              <h2>Original message</h2>
+              <button
+                type="button"
+                className="message-modal-close"
+                aria-label="Close message"
+                onClick={() => setWaMessagePreview(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <pre className="message-modal-text">{waMessagePreview}</pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
