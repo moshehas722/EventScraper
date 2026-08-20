@@ -1,8 +1,10 @@
 // "Event Scraper for WhatsApp" — a silent WhatsApp agent plugin mounted onto
 // the scraper's own always-up Express server (see server.js). It never
 // replies; it only stores every incoming message to the "WhatsApp Messages"
-// Blob store — enriched with an LLM-extracted event summary (see llm.js) —
-// and prunes entries older than the configured retention window.
+// Blob store — enriched with an LLM-extracted event summary, applied
+// slightly later via a batched Gemini call (see llm.js and the extraction
+// queue below) — and prunes entries older than the configured retention
+// window.
 //
 // Registers against the WhatsApp agent's main service using the standard
 // remote-plugin HTTP contract (POST /plugins/register, POST /on-message,
@@ -16,7 +18,7 @@ import {
   loadWhatsAppPluginSecret,
   saveWhatsAppPluginSecret,
 } from './blob.js';
-import { extractEventFromMessage } from './llm.js';
+import { extractEventsFromMessages } from './llm.js';
 import { toPortalEventFromWhatsAppEntry } from '../portalEvent.js';
 
 // Node doesn't auto-load .env files; server.js's own loader runs before this
@@ -36,6 +38,29 @@ const DEFAULT_RETENTION_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const REGISTER_RETRY_INTERVAL_MS = 10_000;
+
+// The Gemini free tier caps requests/day far below typical message volume,
+// so messages are extracted in batches rather than one Gemini call each:
+// a batch flushes once it reaches WHATSAPP_EXTRACTION_BATCH_SIZE messages,
+// or WHATSAPP_EXTRACTION_BATCH_MINUTES have passed since the oldest queued
+// message, whichever comes first.
+const DEFAULT_EXTRACTION_BATCH_SIZE = 10;
+const DEFAULT_EXTRACTION_BATCH_MINUTES = 15;
+
+function envPositiveNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const EXTRACTION_BATCH_SIZE = envPositiveNumber(
+  'WHATSAPP_EXTRACTION_BATCH_SIZE',
+  DEFAULT_EXTRACTION_BATCH_SIZE,
+);
+const EXTRACTION_BATCH_MINUTES = envPositiveNumber(
+  'WHATSAPP_EXTRACTION_BATCH_MINUTES',
+  DEFAULT_EXTRACTION_BATCH_MINUTES,
+);
+const EXTRACTION_BATCH_INTERVAL_MS = EXTRACTION_BATCH_MINUTES * 60_000;
 
 const CONFIG_JSON_SCHEMA = {
   type: 'object',
@@ -86,6 +111,96 @@ async function storeAndPrune(entry, retentionDays) {
 
     return kept.length;
   });
+}
+
+// Patches the `event` field onto already-stored messages once a batched
+// extraction result comes back (see the extraction queue below). Reuses
+// storeAndPrune's write queue so an append (a new incoming message) and an
+// update (this) can never race each other's get→put cycle on the same Blob
+// file. A message that aged out of retention (or was otherwise not found)
+// between being queued and the batch flushing is silently skipped — it's
+// already gone from the store, so there's nothing to patch.
+async function applyExtractedEvents(updates) {
+  if (updates.length === 0) return;
+
+  return serialize(async () => {
+    const messages = await downloadWhatsAppMessages();
+    const eventByKey = new Map(updates.map((u) => [`${u.chatJid} ${u.id}`, u.event]));
+
+    let changed = 0;
+    const next = messages.map((m) => {
+      const key = `${m.chatJid} ${m.id}`;
+      if (!eventByKey.has(key)) return m;
+      changed += 1;
+      return { ...m, event: eventByKey.get(key) };
+    });
+    if (changed === 0) return;
+
+    await saveWhatsAppMessages(next);
+    try {
+      const portalEvents = next.map(toPortalEventFromWhatsAppEntry).filter(Boolean);
+      await saveWhatsAppEvents(portalEvents);
+    } catch (err) {
+      console.error(
+        '[whatsapp-plugin] failed to derive/save portal events after batch extraction (messages still updated):',
+        err.message,
+      );
+    }
+    console.log(`[whatsapp-plugin] applied extraction results to ${changed}/${updates.length} message(s)`);
+  });
+}
+
+// Messages queued for the next batched Gemini call. Flushed once it reaches
+// EXTRACTION_BATCH_SIZE, or EXTRACTION_BATCH_INTERVAL_MS after the oldest
+// queued message, whichever comes first.
+/** @type {Array<{ chatJid: string, id: string, text: string }>} */
+let pendingExtractions = [];
+let extractionFlushTimer = null;
+
+async function flushExtractionQueue() {
+  if (extractionFlushTimer) {
+    clearTimeout(extractionFlushTimer);
+    extractionFlushTimer = null;
+  }
+  if (pendingExtractions.length === 0) return;
+
+  const batch = pendingExtractions;
+  pendingExtractions = [];
+
+  let results;
+  try {
+    results = await extractEventsFromMessages(batch.map((m) => m.text));
+  } catch (err) {
+    // The messages themselves are already safely stored (with event: null)
+    // from handleMessage — losing this batch's extraction is a degraded
+    // experience, not data loss.
+    console.error(`[whatsapp-plugin] batch event extraction failed for ${batch.length} message(s):`, err.message);
+    return;
+  }
+
+  const updates = batch.map((m, i) => ({ chatJid: m.chatJid, id: m.id, event: results[i] ?? null }));
+  try {
+    await applyExtractedEvents(updates);
+  } catch (err) {
+    console.error('[whatsapp-plugin] failed to apply batch extraction results:', err.message);
+  }
+}
+
+function scheduleExtractionFlush() {
+  if (extractionFlushTimer) return; // already scheduled for the oldest queued message
+  extractionFlushTimer = setTimeout(() => {
+    extractionFlushTimer = null;
+    flushExtractionQueue().catch((err) => console.error('[whatsapp-plugin] extraction flush threw:', err.message));
+  }, EXTRACTION_BATCH_INTERVAL_MS);
+}
+
+function queueForExtraction(chatJid, id, text) {
+  pendingExtractions.push({ chatJid, id, text });
+  if (pendingExtractions.length >= EXTRACTION_BATCH_SIZE) {
+    flushExtractionQueue().catch((err) => console.error('[whatsapp-plugin] extraction flush threw:', err.message));
+    return;
+  }
+  scheduleExtractionFlush();
 }
 
 /**
@@ -161,13 +276,9 @@ export function mountWhatsAppPlugin(app) {
   async function handleMessage({ chatJid, message, config }) {
     const retentionDays = normalizeRetentionDays(config);
 
-    let event = null;
-    try {
-      event = await extractEventFromMessage(message.text);
-    } catch (err) {
-      console.error('[whatsapp-plugin] event extraction failed:', err.message);
-    }
-
+    // event starts null and is filled in later, out of band, once this
+    // message's batch flushes (see the extraction queue above) — storing
+    // the message must never wait on (or be lost to a failure of) Gemini.
     const entry = {
       chatJid,
       id: message.id,
@@ -177,14 +288,17 @@ export function mountWhatsAppPlugin(app) {
       timestamp: message.timestamp,
       text: message.text,
       receivedAt: Date.now(),
-      event,
+      event: null,
     };
     try {
       const remaining = await storeAndPrune(entry, retentionDays);
       console.log(`[whatsapp-plugin] stored message from ${chatJid} — ${remaining} kept (retention: ${retentionDays}d)`);
     } catch (err) {
       console.error('[whatsapp-plugin] failed to store/prune message:', err.message);
+      return;
     }
+
+    queueForExtraction(chatJid, message.id, message.text);
   }
 
   app.post('/on-message', (req, res) => {
@@ -208,6 +322,13 @@ export function mountWhatsAppPlugin(app) {
       } catch (err) {
         console.error('[whatsapp-plugin] unregister on shutdown failed:', err.message);
       }
+    }
+    // Best-effort: flush any messages still waiting on their extraction
+    // batch so a routine redeploy doesn't strand them without event data.
+    try {
+      await flushExtractionQueue();
+    } catch (err) {
+      console.error('[whatsapp-plugin] extraction flush on shutdown failed:', err.message);
     }
     process.exit(0);
   }
