@@ -73,17 +73,6 @@ function formatShortDateTime(d) {
   });
 }
 
-function formatCompactScope(mode, selectedDate) {
-  if (mode === 'all') return 'All';
-  const dayIso = getFilterDayIso(mode, selectedDate);
-  if (dayIso) return `${formatDayName(dayIso, 'short')}, ${formatMonthDay(dayIso)}`;
-  if (mode === 'week') {
-    const today = todayIso();
-    return `${formatMonthDay(today)}–${formatMonthDay(addDays(today, 6))}`;
-  }
-  return null;
-}
-
 /** @typedef {'today' | 'tomorrow' | `plus${number}` | 'week' | 'all' | 'date'} DateFilterMode */
 
 function dayOffsetFromMode(mode) {
@@ -425,10 +414,25 @@ export default function App() {
     });
   }, [loadWhatsAppMessages]);
 
+  // Loaded once on mount (independent of the panel) so the "last message
+  // received" timestamp can show in the page header without the user having
+  // to open the WhatsApp panel first. StrictMode (dev only) double-invokes
+  // this effect, so guard against firing the fetch twice.
+  const whatsappMountLoadStartedRef = useRef(false);
+  useEffect(() => {
+    if (whatsappMountLoadStartedRef.current) return;
+    whatsappMountLoadStartedRef.current = true;
+    loadWhatsAppMessages();
+  }, [loadWhatsAppMessages]);
+
   const sortedWhatsappMessages = useMemo(
     () => [...whatsappMessages].sort((a, b) => (b.receivedAt ?? 0) - (a.receivedAt ?? 0)),
     [whatsappMessages],
   );
+  const lastWhatsAppMessageAt = useMemo(() => {
+    const receivedAt = sortedWhatsappMessages[0]?.receivedAt;
+    return receivedAt ? new Date(receivedAt) : null;
+  }, [sortedWhatsappMessages]);
 
   const sources = [...new Set(events.map((e) => e.source))].sort((a, b) => a.localeCompare(b));
   // WhatsApp-origin sources have no favicon-able origin — shown with a badge
@@ -547,8 +551,6 @@ export default function App() {
   const sourceFilteredEvents = typeEvents.filter((e) => selectedSources.has(e.source));
   const filteredEvents = sourceFilteredEvents.filter((e) => !isBlacklisted(e, blacklist));
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
-  const typeFilterActive = typeFilter !== 'all';
-  const blacklistActive = sourceFilteredEvents.length > filteredEvents.length;
   const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
   const activeDayIso = getFilterDayIso(dateFilter, date);
   const dateFilters = buildDateFilters();
@@ -600,10 +602,6 @@ export default function App() {
   }, []);
 
   const scopeLabel = dateFilterLabel(dateFilter, date);
-  const scopeCompact = formatCompactScope(dateFilter, date);
-  const filterActive = sourceFilterActive || typeFilterActive || blacklistActive;
-  const displayCount = filteredEvents.length;
-  const scopeCount = dateEvents.length;
 
   const renderSourceItem = (name, nested = false) => {
     const selected = selectedSources.has(name);
@@ -1256,14 +1254,24 @@ export default function App() {
             </div>
           </div>
 
-          {lastFetched && !loading && (
-            <p className="meta">
-              <time dateTime={(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched).toISOString()}>
-                {formatShortDateTime(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched)}
-              </time>
-              {' · '}
-              {filterActive ? `${displayCount}/${scopeCount}` : displayCount} events
-              {scopeCompact && <> · {scopeCompact}</>}
+          {((lastFetched && !loading) || lastWhatsAppMessageAt) && (
+            <p className="meta meta-status">
+              {lastWhatsAppMessageAt && (
+                <span className="meta-status-item" title="Last WhatsApp message received">
+                  <span aria-hidden>💬</span>{' '}
+                  <time dateTime={lastWhatsAppMessageAt.toISOString()}>
+                    {formatShortDateTime(lastWhatsAppMessageAt)}
+                  </time>
+                </span>
+              )}
+              {lastFetched && !loading && (
+                <span className="meta-status-item" title="Last site scrape">
+                  <span aria-hidden>📍</span>{' '}
+                  <time dateTime={(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched).toISOString()}>
+                    {formatShortDateTime(source === 'blob' && snapshotUploadedAt ? snapshotUploadedAt : lastFetched)}
+                  </time>
+                </span>
+              )}
             </p>
           )}
           {loading && !lastFetched && !disableBlob && (
