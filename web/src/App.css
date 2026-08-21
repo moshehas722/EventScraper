@@ -996,6 +996,15 @@
   word-break: break-word;
 }
 
+.message-modal-link {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.message-modal-link:hover {
+  color: var(--accent);
+}
+
 .favorite-btn {
   display: inline-flex;
   align-items: center;

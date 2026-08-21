@@ -171,6 +171,26 @@ function categoryIcon(category) {
   return CATEGORY_ICONS[category] ?? CATEGORY_ICONS.other;
 }
 
+const URL_PATTERN = /(https?:\/\/[^\s]+)/g;
+const URL_TRAILING_PUNCTUATION = /[)\]}>.,!?*"'`]+$/;
+
+/** Render plain text with any http(s) URLs turned into clickable links. */
+function linkifyText(text) {
+  return text.split(URL_PATTERN).map((part, i) => {
+    if (!/^https?:\/\//i.test(part)) return part;
+    const trailing = part.match(URL_TRAILING_PUNCTUATION)?.[0] ?? '';
+    const url = trailing ? part.slice(0, -trailing.length) : part;
+    return (
+      <span key={i}>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="message-modal-link">
+          {url}
+        </a>
+        {trailing}
+      </span>
+    );
+  });
+}
+
 /** @typedef {'all' | typeof EVENT_CATEGORIES[number]} TypeFilterMode */
 
 function matchesTypeFilter(category, mode) {
@@ -1450,7 +1470,7 @@ export default function App() {
                 ✕
               </button>
             </div>
-            <pre className="message-modal-text">{waMessagePreview}</pre>
+            <pre className="message-modal-text">{linkifyText(waMessagePreview)}</pre>
           </div>
         </div>
       )}
