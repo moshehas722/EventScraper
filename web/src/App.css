@@ -1676,13 +1676,9 @@
     border-bottom: none;
   }
 
-  .name-cell {
+  /* Row 1: category icon, time, location */
+  .category-cell {
     order: 1;
-    flex-basis: 100%;
-  }
-
-  .name-cell a {
-    font-size: 0.98rem;
   }
 
   .date-cell {
@@ -1695,13 +1691,40 @@
     order: 3;
   }
 
-  .price-cell {
+  .site-cell {
     order: 4;
-    margin-left: auto;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
-  .site-cell {
+  .site-cell span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Forced break so row 2 starts on a new line */
+  .events-table tr::after {
+    content: '';
     order: 5;
     flex-basis: 100%;
+    height: 0;
+  }
+
+  /* Row 2: event name, price */
+  .name-cell {
+    order: 6;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .name-cell a,
+  .name-cell .event-name-link {
+    font-size: 0.98rem;
+  }
+
+  .price-cell {
+    order: 7;
+    margin-left: auto;
   }
 }
