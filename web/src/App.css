@@ -1182,6 +1182,19 @@
   width: 2.1rem;
   min-width: 0;
   padding: 0.3rem;
+  border: 1.5px solid transparent;
+  opacity: 0.5;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.where-icon-btn:hover {
+  opacity: 0.8;
+}
+
+.where-icon-btn.filter-segment-btn--selected {
+  background: rgba(108, 140, 255, 0.3);
+  border-color: var(--accent);
+  opacity: 1;
 }
 
 .multi-select-toggle {
