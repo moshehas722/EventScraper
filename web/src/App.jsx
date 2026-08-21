@@ -245,6 +245,7 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [selectedSources, setSelectedSources] = useState(() => new Set());
   const [multiSelect, setMultiSelect] = useState(() => initialUi?.multiSelect ?? true);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState(
     () => initialUi?.collapsedGroups ?? new Set(),
   );
@@ -569,7 +570,10 @@ export default function App() {
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
   const typeEvents = dateEvents.filter((e) => matchesTypeFilter(e.category, typeFilter));
   const sourceFilteredEvents = typeEvents.filter((e) => selectedSources.has(e.source));
-  const filteredEvents = sourceFilteredEvents.filter((e) => !isBlacklisted(e, blacklist));
+  const unhiddenEvents = sourceFilteredEvents.filter((e) => !isBlacklisted(e, blacklist));
+  const filteredEvents = favoritesOnly
+    ? unhiddenEvents.filter((e) => favoriteIds.has(e.id))
+    : unhiddenEvents;
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
   const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
   const activeDayIso = getFilterDayIso(dateFilter, date);
@@ -1189,6 +1193,16 @@ export default function App() {
                 >
                   Multi
                 </button>
+                <button
+                  type="button"
+                  className={`multi-select-toggle multi-select-toggle--liked${favoritesOnly ? ' multi-select-toggle--liked-active' : ''}`}
+                  aria-pressed={favoritesOnly}
+                  aria-label={favoritesOnly ? 'Show all events' : 'Show only liked events'}
+                  title={favoritesOnly ? 'Show all events' : 'Show only liked events'}
+                  onClick={() => setFavoritesOnly((prev) => !prev)}
+                >
+                  <span aria-hidden>{favoritesOnly ? '♥' : '♡'}</span> Liked
+                </button>
               </div>
             </div>
           )}
@@ -1339,7 +1353,9 @@ export default function App() {
               <p>
                 {sourceFilteredEvents.length === 0
                   ? 'No events match the selected sources.'
-                  : 'All matching events are hidden.'}
+                  : favoritesOnly && unhiddenEvents.length > 0
+                    ? 'No liked events match the current filters.'
+                    : 'All matching events are hidden.'}
               </p>
             </div>
           )}

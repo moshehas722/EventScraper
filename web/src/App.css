@@ -1236,6 +1236,12 @@
   color: var(--accent-hover);
 }
 
+.multi-select-toggle--liked-active {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: var(--danger);
+}
+
 .category-col {
   width: 1.75rem;
 }
