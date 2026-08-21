@@ -1590,6 +1590,17 @@
     flex: 0 0 auto;
   }
 
+  /* Force the icon grid onto its own full-width row so it isn't squeezed to
+     make room for All/Multi — those wrap to a row below instead. */
+  .where-filter .where-icon-row {
+    flex: 1 0 100%;
+    width: 100%;
+  }
+
+  .multi-select-toggle {
+    margin-left: 0;
+  }
+
   .controls.card {
     padding-inline: 0.75rem;
   }
