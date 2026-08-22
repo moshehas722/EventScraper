@@ -22,6 +22,7 @@ import {
   sortBlacklist,
   toBlacklistRecord,
 } from './blacklist.js';
+import { loadTheme, saveTheme, applyTheme } from './theme.js';
 import './App.css';
 
 function todayIso() {
@@ -255,6 +256,12 @@ export default function App() {
   const [dismissedUpcomingBannerKey, setDismissedUpcomingBannerKey] = useState(
     /** @type {string | null} */ (null),
   );
+  // null = no explicit choice yet — follow the OS's prefers-color-scheme
+  // (see index.css and index.html's inline pre-paint script).
+  const [theme, setTheme] = useState(/** @type {'light' | 'dark' | null} */ (() => loadTheme()));
+  const [systemPrefersLight, setSystemPrefersLight] = useState(
+    () => window.matchMedia?.('(prefers-color-scheme: light)').matches ?? false,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
@@ -278,6 +285,23 @@ export default function App() {
   // Remembers the last multi-selection so turning "Multiple selection" back on
   // restores it, instead of being stuck with whatever single item was left.
   const multiSelectionBackupRef = useRef(/** @type {Set<string> | null} */ (null));
+
+  useEffect(() => {
+    applyTheme(theme);
+    saveTheme(theme);
+  }, [theme]);
+
+  // Keeps the theme toggle's icon correct if the OS theme changes while the
+  // tab is open and the user hasn't made an explicit in-app choice — the
+  // actual page colors already update live via the CSS media query in
+  // index.css regardless, this only affects which icon the button shows.
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: light)');
+    if (!mq) return;
+    const handleChange = (e) => setSystemPrefersLight(e.matches);
+    mq.addEventListener('change', handleChange);
+    return () => mq.removeEventListener('change', handleChange);
+  }, []);
 
   // Site metadata powers the Where bar's per-venue icon grouping (see
   // sourceGroups.js) — needed in both live-scrape and Blob-only (Vercel)
@@ -566,6 +590,9 @@ export default function App() {
   const selectNoneSources = () => {
     setSelectedSources(new Set());
   };
+
+  const effectiveTheme = theme ?? (systemPrefersLight ? 'light' : 'dark');
+  const toggleTheme = () => setTheme(effectiveTheme === 'light' ? 'dark' : 'light');
 
   const dateEvents = events.filter((e) => matchesDateFilter(e.date, dateFilter, date));
   const typeEvents = dateEvents.filter((e) => matchesTypeFilter(e.category, typeFilter));
@@ -898,6 +925,15 @@ export default function App() {
               {favorites.length > 0 && (
                 <span className="favorites-count">{favorites.length}</span>
               )}
+            </button>
+            <button
+              type="button"
+              className="theme-toggle"
+              aria-label={effectiveTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              title={effectiveTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              onClick={toggleTheme}
+            >
+              <span aria-hidden>{effectiveTheme === 'light' ? '☀️' : '🌙'}</span>
             </button>
           </div>
         </div>

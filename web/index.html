@@ -9,6 +9,22 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0f1117" />
+    <script>
+      // Applied before first paint so an explicit theme choice never flashes
+      // the other theme on load. Keep in sync with web/src/theme.js's storage
+      // key/shape — this can't import that module (it must run inline,
+      // before any bundle loads).
+      (function () {
+        try {
+          var saved = localStorage.getItem('eventscraper-theme');
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.setAttribute('data-theme', saved);
+          }
+        } catch (e) {
+          // ignore private-mode/storage-disabled errors — falls back to OS preference
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
