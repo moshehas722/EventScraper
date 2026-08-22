@@ -18,6 +18,45 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Light palette: applied when the OS prefers light and the user hasn't
+   explicitly pinned dark, or whenever the user has explicitly picked light
+   via the in-app toggle (data-theme, set in web/src/theme.js) — the latter
+   always wins over OS preference, in both directions. --accent/--accent-hover
+   and --danger/--success are darkened versions of their dark-mode hues
+   (rather than reused as-is) so text set in those colors keeps roughly
+   AA-level contrast against a light background; every rgba(...) tint/shadow
+   literal elsewhere in App.css is intentionally left alone since those are
+   translucent highlights, not text, and read fine over either background. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --surface-hover: #eef1f6;
+    --border: #dde2ea;
+    --text: #1a1d29;
+    --text-muted: #5b6472;
+    --accent: #3f5fd9;
+    --accent-hover: #2f4bc0;
+    --success: #15803d;
+    --danger: #dc2626;
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-hover: #eef1f6;
+  --border: #dde2ea;
+  --text: #1a1d29;
+  --text-muted: #5b6472;
+  --accent: #3f5fd9;
+  --accent-hover: #2f4bc0;
+  --success: #15803d;
+  --danger: #dc2626;
+}
+
 *,
 *::before,
 *::after {
