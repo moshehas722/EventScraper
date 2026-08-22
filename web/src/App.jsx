@@ -1533,6 +1533,16 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <button
+        type="button"
+        className="back-to-top"
+        aria-label="Back to top"
+        title="Back to top"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      >
+        <span aria-hidden>↑</span>
+      </button>
     </div>
   );
 }
