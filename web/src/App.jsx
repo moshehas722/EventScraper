@@ -194,6 +194,18 @@ function linkifyText(text) {
 
 /** @typedef {'all' | typeof EVENT_CATEGORIES[number]} TypeFilterMode */
 
+// Search only looks at the event name and, for WhatsApp-origin events, the
+// full original message text (referenceType 'text') — never location, cost,
+// category, or a site-scraped event's reference (just a URL, not prose).
+function matchesSearch(event, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const name = (event.name || '').toLowerCase();
+  if (name.includes(q)) return true;
+  const fullText = event.referenceType === 'text' ? (event.reference || '').toLowerCase() : '';
+  return fullText.includes(q);
+}
+
 function matchesTypeFilter(category, mode) {
   if (mode === 'all') return true;
   return (category || 'other') === mode;
@@ -247,6 +259,7 @@ export default function App() {
   const [selectedSources, setSelectedSources] = useState(() => new Set());
   const [multiSelect, setMultiSelect] = useState(() => initialUi?.multiSelect ?? true);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState(
     () => initialUi?.collapsedGroups ?? new Set(),
   );
@@ -598,9 +611,12 @@ export default function App() {
   const typeEvents = dateEvents.filter((e) => matchesTypeFilter(e.category, typeFilter));
   const sourceFilteredEvents = typeEvents.filter((e) => selectedSources.has(e.source));
   const unhiddenEvents = sourceFilteredEvents.filter((e) => !isBlacklisted(e, blacklist));
-  const filteredEvents = favoritesOnly
+  const favoriteFilteredEvents = favoritesOnly
     ? unhiddenEvents.filter((e) => favoriteIds.has(e.id))
     : unhiddenEvents;
+  const filteredEvents = searchQuery.trim()
+    ? favoriteFilteredEvents.filter((e) => matchesSearch(e, searchQuery))
+    : favoriteFilteredEvents;
   const sourceFilterActive = sources.length > 0 && selectedSources.size < sources.length;
   const showDateColumn = dateFilter === 'week' || dateFilter === 'all';
   const activeDayIso = getFilterDayIso(dateFilter, date);
@@ -1185,6 +1201,33 @@ export default function App() {
       <div className="app-body">
         <main className="main">
         <section className="controls card">
+          <div className="controls-row search-row">
+            <label className="search-field">
+              <span className="field-label field-label--inline">Search</span>
+              <div className="search-input-wrap">
+                <span className="search-input-icon" aria-hidden>🔍</span>
+                <input
+                  type="search"
+                  className="search-input"
+                  placeholder="Search by name…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search events by name"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="search-clear"
+                    aria-label="Clear search"
+                    onClick={() => setSearchQuery('')}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </label>
+          </div>
+
           {whereFilters.length > 0 && (
             <div className="controls-row where-filter-row">
               <div className="where-filter date-filter">
@@ -1396,9 +1439,11 @@ export default function App() {
               <p>
                 {sourceFilteredEvents.length === 0
                   ? 'No events match the selected sources.'
-                  : favoritesOnly && unhiddenEvents.length > 0
-                    ? 'No liked events match the current filters.'
-                    : 'All matching events are hidden.'}
+                  : searchQuery.trim() && favoriteFilteredEvents.length > 0
+                    ? 'No events match your search.'
+                    : favoritesOnly && unhiddenEvents.length > 0
+                      ? 'No liked events match the current filters.'
+                      : 'All matching events are hidden.'}
               </p>
             </div>
           )}
