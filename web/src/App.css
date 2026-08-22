@@ -897,6 +897,12 @@
   color: var(--text-muted);
 }
 
+.whatsapp-item-structured--error {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--danger);
+}
+
 .whatsapp-structured-row {
   display: grid;
   grid-template-columns: 4.5rem 1fr;

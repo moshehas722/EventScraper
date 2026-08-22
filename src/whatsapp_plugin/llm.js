@@ -76,6 +76,27 @@ function emptyResult() {
   return { isEvent: false, name: null, date: null, time: null, location: null, cost: null, category: 'other' };
 }
 
+/**
+ * Placeholder result for a message whose batch's Gemini call failed outright
+ * (quota exhausted, network error, bad response, etc). Distinct from
+ * emptyResult() — isEvent is still false (so it's never mistaken for a real,
+ * dateless event and doesn't leak into the portal feed), but name/llmError
+ * let the UI show it was never actually analyzed, rather than Gemini having
+ * decided it isn't an event.
+ */
+export function llmErrorResult() {
+  return {
+    isEvent: false,
+    name: 'LLM error',
+    date: null,
+    time: null,
+    location: null,
+    cost: null,
+    category: 'other',
+    llmError: true,
+  };
+}
+
 /** @param {object} parsed */
 function normalizeResult(parsed) {
   return {
