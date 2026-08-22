@@ -782,6 +782,13 @@ export default function App() {
 
   const renderWhatsappStructured = (message) => {
     const ev = message.event;
+    if (ev?.llmError) {
+      return (
+        <p className="whatsapp-item-structured whatsapp-item-structured--error">
+          ⚠️ LLM error — will retry
+        </p>
+      );
+    }
     if (!ev?.isEvent) {
       return (
         <p className="whatsapp-item-structured whatsapp-item-structured--none">

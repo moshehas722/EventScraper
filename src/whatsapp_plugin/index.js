@@ -18,7 +18,7 @@ import {
   loadWhatsAppPluginSecret,
   saveWhatsAppPluginSecret,
 } from './blob.js';
-import { extractEventsFromMessages } from './llm.js';
+import { extractEventsFromMessages, llmErrorResult } from './llm.js';
 import { toPortalEventFromWhatsAppEntry } from '../portalEvent.js';
 
 // Node doesn't auto-load .env files; server.js's own loader runs before this
@@ -172,9 +172,23 @@ async function flushExtractionQueue() {
     results = await extractEventsFromMessages(batch.map((m) => m.text));
   } catch (err) {
     // The messages themselves are already safely stored (with event: null)
-    // from handleMessage — losing this batch's extraction is a degraded
-    // experience, not data loss.
+    // from handleMessage, so losing this batch's extraction isn't data loss
+    // — but a failure here (e.g. Gemini quota exhausted, network error) can
+    // otherwise persist silently, since a message stays event:null exactly
+    // like one Gemini correctly decided isn't an event. Mark each message
+    // as a visible LLM error and put the batch back at the front of the
+    // queue so the next flush retries it — always via the normal scheduled
+    // flush (never an immediate re-flush) so a persistent failure (e.g. a
+    // daily quota that won't recover for hours) can't retry in a tight loop.
     console.error(`[whatsapp-plugin] batch event extraction failed for ${batch.length} message(s):`, err.message);
+    const errorUpdates = batch.map((m) => ({ chatJid: m.chatJid, id: m.id, event: llmErrorResult() }));
+    try {
+      await applyExtractedEvents(errorUpdates);
+    } catch (applyErr) {
+      console.error('[whatsapp-plugin] failed to mark batch as LLM error:', applyErr.message);
+    }
+    pendingExtractions = [...batch, ...pendingExtractions];
+    scheduleExtractionFlush();
     return;
   }
 
