@@ -93,11 +93,11 @@
 .header-inner {
   max-width: none;
   margin: 0;
-  padding: 0.35rem 1rem;
+  padding: 0.5rem 1rem;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .header-actions {
@@ -445,6 +445,7 @@
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
   flex-shrink: 0;
 }
